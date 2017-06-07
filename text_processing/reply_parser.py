@@ -28,12 +28,12 @@ import regex as re
 import probablepeople
 
 
-from .. import talon
+from .. import talon # was throwing an error - NOTE_MARTIN
 from talon.signature.bruteforce import extract_signature
 # from talon import quotations
 import talon.quotations
 
-from . import preprocess_text
+import preprocess_text
 from . import regexes
 from data import names
 
