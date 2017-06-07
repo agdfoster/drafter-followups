@@ -17,8 +17,12 @@ service = get_credentials()
 """
 
 from googleapiclient import errors
-
 from utils.deep_get import deep_get
+
+####################################################################################
+# SEARCH GMAIL
+# SEARCH GMAIL
+####################################################################################
 
 def list_threads_matching_query(service, user_id='me', query='', max_results=100):
     """ description:
@@ -127,18 +131,17 @@ def msg_ids_from_query(service, user_id, query='', max_results=100): #100=defaul
         print('An error occurred: %s' % error)
 #
 
-def get_message(service, user_id, msg_id):
+####################################################################################
+# RETRIEVE MESSAGES
+# RETRIEVE MESSAGES
+####################################################################################
+
+def get_single_message(service, user_id, msg_id):
     """Get a Message with given ID.
-
-        Args:
-        service: Authorized Gmail API service instance.
-        user_id: User's email address. The special value "me"
-        can be used to indicate the authenticated user.
-        msg_id: The ID of the Message required.
-
-        Returns:
-        A Message.
-        """
+    Args:
+    service: Authorized Gmail API service instance.
+    user_id: User's email address. or the special value "me"
+    Returns a Message."""
     try:
         message = service.users().messages().get(userId=user_id, id=msg_id).execute()
         # print( 'Message snippet: %s' % message['snippet'])
@@ -199,18 +202,13 @@ def get_msgs_from_query(service, user_id, query, max_results=50):
     msg_ids = msg_ids_from_query(service, user_id, query, max_results)
     print('getting messages from IDs')
     messages = get_messages_batch(service, user_id, msg_ids)
+    print('got %d messages'%len(messages))
     return messages
 
-
-# def get_mime_message(service, user_id, msg_id):
-#     '''get message and use it to create MIME message
-#     THE MIME PARSER 'EMAIL' is hitting an error'''
-#     message = service.users().messages().get(userId=user_id, id=msg_id, format='raw').execute()
-#     print('Message snippet: %s' % message['snippet'])
-#     msg_str = base64.urlsafe_b64decode(message['raw'].encode('ASCII'))
-#     # mime_msg = email.message_from_string(msg_str)
-#     return msg_str
-#
+####################################################################################
+# NON BODY ENRICHMENT
+# NON BODY ENRICHMENT
+####################################################################################
 
 def get_to(message):
     ''' get just the to field of a message'''
@@ -267,8 +265,8 @@ def parse_email_and_name(email_header_item):
 #
 
 ####################################################################################
-# THE FOLLOWING FUNCTIONS ARE
-# ALL FOR EXTRACTING EMAIL BODY
+# BODY EXTRACTION FOR ENRICHMENT
+# BODY EXTRACTION FOR ENRICHMENT
 ####################################################################################
 
 def get_parts(message):
@@ -279,6 +277,7 @@ def get_parts(message):
     # parts = payload.get('parts')
     # pprint(payload)
     parts = deep_get(message, 'parts')
+    print(parts)
     if parts:
         if parts[0].get('parts'):
             parts = parts[0].get('parts')
@@ -287,11 +286,11 @@ def get_parts(message):
         # import pprint
         # pprint.pprint(message)
         # raise ValueError("Couldn't get parts from message: {}".format(message))
-    
+
     return parts
 
 def get_body_plain_b64(parts):
-    ''' get's the b64 plain text out of a gmail's payload 'parts' 
+    ''' get's the b64 plain text out of a gmail's payload 'parts'
     DOES NOT TAKE LIST OF PARTS, just one email's parts list '''
     for body in parts:
         if body['mimeType'] == 'text/plain':
@@ -305,8 +304,10 @@ def get_body_html_b64(parts):
         if body['mimeType'] == 'text/html':
             return body['body']['data']
         else: return None
+
+def decode_b64(b64_string):
     ''' decodes a b64 string into an email,
-    works for bothhtml or plain text'''
+    works for both html or plain text'''
     decoded = base64.urlsafe_b64decode(b64_string).decode('utf-8')
     return decoded
 
@@ -374,7 +375,7 @@ if __name__ == '__main__':
         for idx, message in enumerate(msg_ids):
             print('getting message %d'%(idx+1))
             m_id = message['id']
-            message = get_message(service, 'me', m_id)
+            message = get_single_message(service, 'me', m_id)
             to_header = get_to(message)
             people = parse_email_and_name(str(to_header))
             for person in people:
@@ -414,6 +415,7 @@ if __name__ == '__main__':
     # hitlist(100)
     # hitlist_batch(200)
     messages = get_msgs_from_query(service, 'me', 'from:me', 50)
+    print('enriching %d messasges'%len(messages))
     messages = [enrich_message(message) for message in messages]
     # pprint(messages, depth = 4)
 
