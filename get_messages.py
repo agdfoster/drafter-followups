@@ -154,13 +154,6 @@ def get_messages_batch(service, user_id, msg_ids):
     ''' get messages from ids as above - but using google's batch request
     it's much faster for getting lots of messages from IDs in one go.
     limit is 2000 at a time, just doesn't return more'''
-    # THROTTLER (BATCHER)
-    # added after the fact to reduce speed at which laerge requests are made
-    # total_requets = len(msg_ids)
-    # request_batches = [msg_ids[x:x+50] for x in range(0, len(msg_ids), 50)]
-    # print('----- REQUEST BATCHES -----')
-    # print(request_batches)
-    
     # Callback function (for use in a sec)
     messages = []
     def gmail_callback(request_id, response, exception):
@@ -195,14 +188,40 @@ def get_messages_batch(service, user_id, msg_ids):
             raise Exception('Batch request did not complete in time')
     return messages
 
+def get_messages_batch_throttled(service, user_id, msg_ids):
+    ''' chop msg_ids into lists of lists of length n
+    and calls get_message_batch every x seconds to throttle it
+    and avoid hitting gmail api rate limits'''
+    # Tested on 2000 - 
+    # Tested on 10000 -
+    # tested on 100000 - 
+    n = 50
+    sleep = 1 #secs - 1 second seems to work in testing on 'get 1000 samples'
+    # chunk up message id list
+    msg_id_chunks = [msg_ids[i:i + n] for i in range(0, len(msg_ids), n)]
+    # get all messages for those chunks in throttled fashion
+    all_messages_chunks = []
+    for msg_id_chunk in msg_id_chunks:
+        message_chunk = get_messages_batch(service, user_id, msg_id_chunk)
+        time.sleep(sleep)
+        all_messages_chunks.append(message_chunk)
+        print('----- GETTING CHUNKED MESSAGES -----')
+        pprint(message_chunk, depth=2)
+    print('----- FINISHED GETTING CHUNKED MESSAGES -----')
+    # all_message_chunks is now a list of lists - flatten it into list.
+    messages = flatten(all_messages_chunks)
+    # return list of message objects
+    return messages
+
+
 def get_msgs_from_query(service, user_id, query, max_results=50):
     '''wrapper function combining get ids from query
     and get messages batch. reccommended not to exceed 50 results'''
-    print('getting message IDs')
+    print('-----getting message IDs-----')
     msg_ids = msg_ids_from_query(service, user_id, query, max_results)
-    print('getting messages from IDs')
-    messages = get_messages_batch(service, user_id, msg_ids)
-    print('got %d messages'%len(messages))
+    print('-----getting messages from IDs-----')
+    messages = get_messages_batch_throttled(service, user_id, msg_ids)
+    print('-----got %d messages-----'%len(messages))
     return messages
 
 ####################################################################################
@@ -235,9 +254,11 @@ def flatten(list_of_lists):
 def parse_email_and_name(email_header_item):
     ''' extract email and name from an email header item.
     NOTE - takes email header item (string) NOT whole header'''
-    item_value = email_header_item['value']
-    # print('item_value '+str(item_value))
-    people = item_value.split(",")
+    # checks
+    if not email_header_item:
+        return None
+    # print('email_header_item '+str(item_value))
+    people = email_header_item['value'].split(",")
     # print('people '+str(people))
     clean_header_item = []
     for person in people:
@@ -277,7 +298,6 @@ def get_parts(message):
     # parts = payload.get('parts')
     # pprint(payload)
     parts = deep_get(message, 'parts')
-    print(parts)
     if parts:
         if parts[0].get('parts'):
             parts = parts[0].get('parts')
@@ -335,6 +355,11 @@ def get_message_body(message):
     #     }
     return body_plain # TODO html is breaking the file when decoding for some reason
 
+####################################################################################
+# ENRICHMENT WRAPPER
+# ENRICHMENT WRAPPER
+####################################################################################
+
 def enrich_message(message):
     '''wrapper for various parsing functions to put fields we want
     formatted nicely and in an easy to reach object location
@@ -349,17 +374,36 @@ def enrich_message(message):
     # parse header item string into structured obj
     header_from = parse_email_and_name(header_from)
     header_to = parse_email_and_name(header_to)
-    # extract and decode message body
+    print('-----ENRICHEMNT VALUES-----')
+    print('from' + str(header_from))
+    print('to' + str(header_to))
+    # BODY WORK
+    # extract and decode message body (just plain body for now)
     body_plain = get_message_body(message)
-    # put structured values back into main messages object
+    print(str(isinstance(body_plain, str))+' body extracted') # is string?
+    # create another message body which is more readable
+    # Note: if for any reason body_plain is not a string - return body as None (2%)
+    if isinstance(body_plain, str):
+        # 1 replace paragraphs with '•••'
+        body_plain_no_breaks = re.sub(r'(\r\n){2,}',' ••• ', body_plain)
+        # 2 replace remaining non para line breaks with '•'
+        body_plain_no_breaks = re.sub(r'(\r\n)',' • ', body_plain_no_breaks)
+        # put structured values back into main messages object
+    else:
+        body_plain_no_breaks = 'No "body" to transform'
     msg = {
         'GMAIL': {'GMAIL': {'GMAIL': message}},
         'from': header_from,
         'to': header_to,
-        'body_plain': body_plain
+        'body_plain': {'body_plain': body_plain},
+        'body_plain_no_breaks': body_plain_no_breaks
     }
     return msg
 
+####################################################################################
+# DEV USE LOGIC
+# DEV USE LOGIC
+####################################################################################
 if __name__ == '__main__':
     # START_TIME = time.time()
 
@@ -414,10 +458,13 @@ if __name__ == '__main__':
 
     # hitlist(100)
     # hitlist_batch(200)
-    messages = get_msgs_from_query(service, 'me', 'from:me', 50)
-    print('enriching %d messasges'%len(messages))
-    messages = [enrich_message(message) for message in messages]
-    # pprint(messages, depth = 4)
+    messages = get_msgs_from_query(service, 'me', 'from:me', 2000)
+    print('-----enriching %d messasges-----'%len(messages))
+    for i, message in enumerate(messages):
+        enrich_message(message)
+        print('item %d'%i)
+    msgs = [enrich_message(message) for message in messages]
+    pprint(msgs, depth = 3)
 
     
     # logging.info("--- %s seconds to execute ---", round((time.time() - START_TIME), 2))
