@@ -21,7 +21,9 @@ def logg_config(log_level):
     return logger
 
 def logg_init():
-    logg_config(logging.INFO)
+    logg_config(logging.WARNING)
+    # options are: debug info warning error critical
+    
     logging.info("Logger working")
     # stops Google's API lib underlying logs from logging
     logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)

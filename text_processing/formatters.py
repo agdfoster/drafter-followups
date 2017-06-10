@@ -15,7 +15,7 @@ Notes:
 import re
 import datetime
 
-from ..utilities import utils
+from utilities import utils
 
 
 def add_ampm_to_time_string(time_string):

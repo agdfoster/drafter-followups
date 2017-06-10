@@ -18,8 +18,8 @@ from ftfy import fix_text
 import unidecode
 
 from . import regexes
-from ..utilities import timezones
-from ..text_processing import formatters
+from utilities import timezones
+from text_processing import formatters
 
 
 logger = logging.getLogger('preprocess_text')
