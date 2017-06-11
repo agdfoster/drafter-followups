@@ -338,7 +338,7 @@ def parse_email(whole_email_html='', whole_email_plain='', from_email='', from_n
     # This is for emails that use '>' instead of <blockquote>
     reply_only_text = talon.quotations.extract_from_plain(reply_only_text)
     # Temporary function to handle 'On <date> <person> wrote:'
-    reply_only_text = temp_because_talon_not_working(reply_only_text)
+    reply_only_text = temp_because_talon_not_working(reply_only_text) # MARTIN
 
     body_text, signature_text = extract_signature(reply_only_text)
     body_text, signoff_text = signoff_stripper(body_text, from_email=from_email, from_name=from_name)

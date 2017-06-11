@@ -4,26 +4,30 @@ get_msgs_from_query is the big one. Uses batches and relies on a gmail query.
 
 '''
 
-from gmail_quickstart import get_credentials
 import httplib2
 import base64
 import email
 import re
 from googleapiclient.http import BatchHttpRequest
 import time
-from pprint import pprint
+from pprint import pprint,pformat
 import math
+from html2text import html2text
+import logging
 
 from googleapiclient import errors
 from utils.deep_get import deep_get, deep_get_all
 from text_processing.reply_parser import parse_email
+from gmail_quickstart import get_credentials
 
 service = get_credentials()
+logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
 # logger
-import logging
-from _log_config import logg_init
-logg_init()
+# import logging
+# import _log_config #import logg_init
+# logg_init()
 
 
 
@@ -32,7 +36,7 @@ logg_init()
 # SEARCH GMAIL
 ####################################################################################
 
-def list_threads_matching_query(service, user_id='me', query='', max_results=100):
+def list_threads_matching_query(service, user_id='me', query='', max_results=50):
     """ description:
         List all Threads of the user's mailbox matching the query.
 
@@ -158,7 +162,7 @@ def get_single_message(service, user_id, msg_id):
         plogging.info( 'An error occurred: %s' % error)
 #
 
-def get_messages_batch(service, user_id, msg_ids, start=0):
+def get_messages_batch(service, user_id, msg_ids):
     ''' get messages from ids as above - but using google's batch request
     it's much faster for getting lots of messages from IDs in one go.
     limit is 2000 at a time, just doesn't return more'''
@@ -188,7 +192,7 @@ def get_messages_batch(service, user_id, msg_ids, start=0):
     timeout = 30 #secs
     batch_request_complete = False
     while not batch_request_complete:
-        batch_request_complete = len(messages) == len(msg_ids) - start
+        batch_request_complete = len(messages) == len(msg_ids)
         time.sleep(0.5)
         # throw an error if it takes too long (30s)
         timer += 0.5
@@ -210,16 +214,16 @@ def get_messages_batch_throttled(service, user_id, msg_ids, start=0):
     # tested on 100000 - 
     n = 50 # recommended figure from google for all batch APIs
     sleep = 0.2 # setting to 0 works but unsafe incase of extra fast callbacks. only 10% speed benefits beyond 0.2s in tests
-    # chunk up message id list
+    # chunk up message id list into lists of lists [[idslist],[idslist]]
     msg_id_chunks = [msg_ids[i:i + n] for i in range(start, len(msg_ids), n)]
     # get all messages for those chunks in throttled fashion
     all_messages_chunks = []
-    for msg_id_chunk in msg_id_chunks:
-        message_chunk = get_messages_batch(service, user_id, msg_id_chunk, start)
+    for idx, msg_id_chunk in enumerate(msg_id_chunks):
+        message_chunk = get_messages_batch(service, user_id, msg_id_chunk)
         time.sleep(sleep)
         all_messages_chunks.append(message_chunk)
-        logging.info('----- GETTING CHUNKED MESSAGES -----')
-        pprint(message_chunk, depth=2)
+        logging.info('----- GETTING CHUNKED MESSAGES %d of %d -----'%((idx+1)*50, 50*len(msg_id_chunks)))
+        # pprint(message_chunk, depth=2)
     logging.info('----- FINISHED GETTING CHUNKED MESSAGES -----')
     # all_message_chunks is now a list of lists - flatten it into list.
     messages = flatten(all_messages_chunks)
@@ -235,7 +239,7 @@ def get_msgs_from_query(service, user_id, query, max_results=50, start=0):
     logging.info('-----getting message IDs-----')
     msg_ids = msg_ids_from_query(service, user_id, query, max_results)
     logging.info('-----getting messages from IDs-----')
-    messages = get_messages_batch_throttled(service, user_id, msg_ids)
+    messages = get_messages_batch_throttled(service, user_id, msg_ids, start)
     logging.info('-----got %d messages-----'%len(messages))
     return messages
 
@@ -260,6 +264,22 @@ def get_from(headers):
         if  item['name'] in ['From'] or 'From' in item['name']:
             return item
 #
+def get_subject(message):
+    return get_message_header_item(message, 'Subject')
+
+def get_message_header_item(message, header_name):
+    ''' martin's generic header finder function'''
+    headers = message['payload']['headers']
+    # import pprint
+    # pprint.pprint(headers)
+
+    try:
+        value = next(header['value'] for header in headers if header['name'] == header_name)
+    except StopIteration:
+        logger.warning('Could not find header "%s" in message "%s"', header_name, message['id'])
+        return ''
+
+    return value
 
 def get_headers(message):
     '''TODO - builds a header object that works for all emails'''
@@ -275,7 +295,7 @@ def parse_email_and_name(email_header_item):
     NOTE - takes email header item (string) NOT whole header'''
     # checks
     if not email_header_item:
-        return None
+        return [[None, None]]
     # logging.info('email_header_item '+str(item_value))
     people = email_header_item['value'].split(",")
     # logging.info('people '+str(people))
@@ -295,9 +315,11 @@ def parse_email_and_name(email_header_item):
         # no email found - non breaking error
         if len(email) == 0:
             logging.info('- - - - - - - EMAIL ERROR - - - - - - - ')
+            clean_header_item.append([None, None])
         # two emails in one header item - non breaking error, something is wrong.
         elif len(email) > 1 or len(name) > 1:
             logging.info('- - - - - - - ERROR MORE THAN ONE EMAIL IN HEADER ITEM - - - - - - - ')
+            clean_header_item.append([None, None])
         # return so long as neither of the above happened
         else:
             clean_header_item.append([email[0], name[0]])
@@ -323,15 +345,13 @@ def get_parts(message):
     if not parts:
         # sometimes there is no 'parts' and the message is just in a body somewhere
         # I think this is having minimal effect
-        bodies = flatten(deep_get_all(message, 'body'))
-        # now rebuild parts component
-        if len(bodies) > 0:
-            parts = []
-            for body in bodies:
-                part = {'body': body}
-                parts.append(part)
-        else: 
-            logging.warning('failed to find parts')
+        body = deep_get(message, 'body')
+        if body:
+            logging.warning('COULD NOT FIND PART - FOUND BODY INSTEAD')
+            # now rebuild parts component
+            parts = [{'body': body}]
+        elif not body:
+            logging.info('failed to find parts')
             return None
         # import pprint
         # pprint.pprint(message)
@@ -347,7 +367,7 @@ def get_body_using_mimetype(parts, mimetype='text/plain'):
     for body in parts:
         if body.get('mimeType') == mimetype:
             if not body.get('body',{}).get('data'):
-                logging.warning('ERROR - this mimetype body has no data...!')
+                logging.info('ERROR - this mimetype body has no data...!')
                 return None
             else:
                 return body['body']['data']
@@ -381,31 +401,31 @@ def get_message_body(message):
     where body is both html and plain body decoded into english from b64.
     Will return None if object does not have both plain and HTML parts '''
     # 1 get parts from message payload
-    # 'parts' is a list of body items within payload. 
+    # 'parts' is a list of body items within payload.
     parts = get_parts(message)
     # some messages are missing parts and just have the body
     # 2 filter out messages which don't have both plain text and html - fuck those guys.
     if not parts:
-        logging.warning('NO PARTS FOUND, EXCLUDED')
+        logging.info('NO PARTS FOUND, EXCLUDED')
         body_plain = body_html = None
     # if len(parts) < 2:
-    #     logging.warning('MISSING EITHER PLAIN BODY OR HTML, EXCLUDED THIS ITEM')
+    #     logging.info('MISSING EITHER PLAIN BODY OR HTML, EXCLUDED THIS ITEM')
     #     return None
     # if not parts[0] or not parts[1]:
-    #     logging.warning('EITHER PLAIN BODY OR HTML WAS NONETYPE, EXCLUDED THIS ITEM')
+    #     logging.info('EITHER PLAIN BODY OR HTML WAS NONETYPE, EXCLUDED THIS ITEM')
     #     return None
     # 3 get plain text and HTML and decode bs4
     body_plain_b64 = get_body_using_mimetype(parts, mimetype='text/plain')
     if body_plain_b64:
         body_plain = decode_b64(body_plain_b64)
     elif not body_plain_b64:
-        logging.warning('failed to get body_plain_bs4 from mimetype')
+        logging.info('failed to get body_plain_bs4 from mimetype')
         body_plain = None
     body_html_b64 = get_body_using_mimetype(parts, mimetype='text/html')
     if body_html_b64:
         body_html = decode_b64(body_html_b64)
     elif not body_html_b64:
-        logging.warning('failed to get body_html_bs4 from mimetype')
+        logging.info('failed to get body_html_bs4 from mimetype')
         body_html = None
     # return body
     body = {
@@ -421,25 +441,38 @@ def get_message_body(message):
 
 def categorize_message(message):
     '''returns a special category if the email is eg a cal invite'''
+    msg_type = []
 
     parts = get_parts(message)
     if not parts:
-        return None
-    # Get Mimetypes
-    mimes = [deep_get_all(part, 'mimeType') for part in parts]
-    mimes = flatten(mimes)
-    print('mimetypes found = ' + str(mimes))
+        msg_type.append('no_parts')
     
-    # calendar invites
+    # Get Mimetypes
+    if parts:
+        mimes = [deep_get_all(part, 'mimeType') for part in parts]
+        mimes = flatten(mimes)
+        # print('mimetypes found = ' + str(mimes))
+    
+    # tag calendar invites
     for mime in mimes:
         if mime in ['text/calendar', 'application/ics']:
-            return 'calendar_invite'
+            msg_type.append('calendar_invite')
 
-    # HTML ONLY in body
+    # tag HTML ONLY in body
+    body_plain = get_message_body(message)['body_plain']
+    body_html = get_message_body(message)['body_html']
+    if body_html and not body_html:
+        msg_type.append('html_only')
+
+    # tag Forwarded message
+    header_subject = get_subject(message)
+    is_fwd = header_subject.startswith('Fwd:')
+    if is_fwd: 
+        msg_type.append('Forward')
     #
-    #
-    else: 
-        return None
+    # if len(msg_type) == 0: msg_type = None
+    if len(msg_type) > 1: msg_type = set(msg_type)
+    return msg_type
 
 ####################################################################################
 # QUOTED TEXT EXTRACTION AND BASIC MESSAGE SEGMENTATION
@@ -469,38 +502,44 @@ def enrich_message(message):
     msg replaces message to symbolise'''
     # categorize message
     message_type = categorize_message(message)
+    
     # ids etc
     message_id = message.get('id')
     thread_id = message.get('threadId')
     date_sent = message.get('internalDate')
     snippet = message.get('snippet')
+    
     # get item out of headers
     headers = flatten(deep_get_all(message, 'headers'))
     header_from = get_from(headers)
     header_to = get_to(headers)
+    header_subject = get_subject(message)
     # TODO: get_cc
     # TODO: get_bcc
     # parse header item string into structured obj
     header_from = parse_email_and_name(header_from)
     header_to = parse_email_and_name(header_to)
-    logging.info('-----ENRICHEMNT VALUES-----')
-    logging.warning('from' + str(header_from))
-    logging.warning('to' + str(header_to))
+    # logging.info('-----ENRICHEMNT VALUES-----')
+    # logging.info('from' + str(header_from))
+    # logging.info('to' + str(header_to))
+    
     # BODY WORK
     # extract and decode message body (just plain body for now)
     # for thread integrity it's important not to lose messages where possible
     body_plain = get_message_body(message)['body_plain']
     body_html = get_message_body(message)['body_html']
+    if body_html: body_html2text = html2text(body_html)
+    else: body_html2text = None
     # some messages are just a blank message
     if not body_plain and snippet in ['', ' ', None]:
         body_plain = ''
     # if get message body fails...
     if not isinstance(body_plain, str) and not message_type:
         # there are legitimate reasons for no body eg: cal invite
-        logging.warning('message type = ' + str(message_type))
+        logging.info('message type = ' + str(message_type))
         # otherwise - debug or ignore
-        logging.warning('failed this payload: type: ' + str(body_plain))
-        logging.warning(pprint(message))
+        logging.info('failed this payload: type: ' + str(body_plain))
+        logging.info(pformat(message))
     # create another message body which is more readable
     if isinstance(body_plain, str):
         # 1 replace paragraphs with '•••'
@@ -521,9 +560,11 @@ def enrich_message(message):
         'id_thread': thread_id,
         'date_sent': date_sent,
         'm_snippet': snippet,
+        'm_subject': header_subject,
         'm_body': {
                 'html': body_html,
                 'plain': body_plain,
+                'html2text': body_html2text,
                 'plain_no_breaks': body_plain_no_breaks,
                 'plain_stripped': parsed_email['body'],
                 'greeting': parsed_email['greeting'],
@@ -592,16 +633,13 @@ if __name__ == '__main__':
 
     # hitlist(100)
     # hitlist_batch(200)
-    messages = get_msgs_from_query(service, 'me', 'from:me', 100, start=0)
+    messages = get_msgs_from_query(service, 'me', 'from:me', 10, start=0)
     logging.info('-----enriching %d messasges-----'%len(messages))
-    for i, message in enumerate(messages): # temp
-        enrich_message(message)
-        logging.info('item %d'%i)
     msgs = [enrich_message(message) for message in messages]
 
     for i, msg in enumerate(msgs):
-        logging.warning('----- msg %d stripped text-----'%i)
-        logging.warning(msg['m_body']['plain_stripped'])
+        logging.info('----- msg %d stripped text-----'%i)
+        logging.info(msg['m_body']['plain_stripped'])
     
     # INVESTIGATE MSGS with 0 length body_stripped
     msgs_failed_strip = [
@@ -609,11 +647,11 @@ if __name__ == '__main__':
         if len(msg['m_body']['plain_stripped']) < 10
         and not msg['_message_type'] == 'calendar_invite'
     ]
-    pprint(msgs_failed_strip, depth=4)
-    
+    # logging.info(pformat(msgs_failed_strip, depth=4))
+
 
     # INVESTIGATE MSGS WITH NO BODY
-    # msgs_no_body = [msg for msg in msgs if msg['m_body']['plain'] == None and msg['m_body']['html'] == None]
+    msgs_no_body = [msg for msg in msgs if msg['m_body']['plain'] == None and msg['m_body']['html'] == None]
     # for msg in msgs_no_body:
     #     print('-----------------------NO BODY EMAILS-------------------------------')
     #     pprint(msg['GMAIL']['spacer']['spacer']['payload'])
@@ -621,11 +659,11 @@ if __name__ == '__main__':
     #     print('-----------------------END OF NO BODY EMAILS-------------------------------')
 
     msgs_calinvites = [msg for msg in msgs if msg['_message_type'] == 'calendar_invite']
-    logging.warning('num cal invites: ' + str(100*len(msgs_calinvites)/len(msgs)) + '%')
-    logging.warning('num no body emails: ' + str(100*len(msgs_no_body)/len(msgs)) + '%')
+    logging.info('num cal invites: ' + str(100*len(msgs_calinvites)/len(msgs)) + '%')
+    logging.info('num no body emails: ' + str(100*len(msgs_no_body)/len(msgs)) + '%')
     
     # get messages with no snippets
-    # logging.warning('---- no snippet msgs ----')
+    # logging.info('---- no snippet msgs ----')
     # msgs_no_snippet = [msg for msg in msgs if msg['m_snippet'] in ['',' ',None]]
     # pprint(msgs_no_snippet, depth=4)
 
