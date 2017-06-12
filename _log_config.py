@@ -2,8 +2,6 @@
 the whole of that file, no need to call anything. '''
 import logging
 
-logging.warning('Watch out!')  # will print a message to the console
-logging.info('I told you so')  # will not print anything
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 

@@ -22,7 +22,7 @@ from gmail_quickstart import get_credentials
 
 service = get_credentials()
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 # logger
 # import logging
@@ -124,7 +124,7 @@ def msg_ids_from_query(service, user_id, query='', max_results=100): #100=defaul
         """
     try:
         response = service.users().messages().list(userId=user_id, q=query).execute()
-        logging.info('getting IDs page 1')
+        logging.info('getting message IDs from gmail page 1')
         messages = []
         if 'messages' in response:
             messages.extend(response['messages'])
@@ -134,7 +134,7 @@ def msg_ids_from_query(service, user_id, query='', max_results=100): #100=defaul
             logging.info('getting %d more pages'%int(xtra_pages+1))
             for i in range(2, xtra_pages+3):
                 if 'nextPageToken' in response:
-                    logging.info('getting IDs page %d of %d'%(i, xtra_pages+2))
+                    logging.info('getting message IDs from gmail %d of %d'%(i, xtra_pages+2))
                     page_token = response['nextPageToken']
                     response = service.users().messages().list(userId=user_id, q=query, pageToken=page_token).execute()
                     messages.extend(response['messages'])
@@ -222,7 +222,7 @@ def get_messages_batch_throttled(service, user_id, msg_ids, start=0):
         message_chunk = get_messages_batch(service, user_id, msg_id_chunk)
         time.sleep(sleep)
         all_messages_chunks.append(message_chunk)
-        logging.info('----- GETTING CHUNKED MESSAGES %d of %d -----'%((idx+1)*50, 50*len(msg_id_chunks)))
+        logging.info('----- GETTING MESSAGES FROM GMAIL %d of %d -----'%((idx+1)*50, 50*len(msg_id_chunks)))
         # pprint(message_chunk, depth=2)
     logging.info('----- FINISHED GETTING CHUNKED MESSAGES -----')
     # all_message_chunks is now a list of lists - flatten it into list.
@@ -276,7 +276,7 @@ def get_message_header_item(message, header_name):
     try:
         value = next(header['value'] for header in headers if header['name'] == header_name)
     except StopIteration:
-        logger.warning('Could not find header "%s" in message "%s"', header_name, message['id'])
+        logging.warning('Could not find header "%s" in message "%s"', header_name, message['id'])
         return ''
 
     return value
@@ -290,7 +290,7 @@ def flatten(list_of_lists):
     return list_out
 #
 
-def parse_email_and_name(email_header_item):
+def parse_email_and_name(email_header_item, msg_id):
     ''' extract email and name from an email header item.
     NOTE - takes email header item (string) NOT whole header'''
     # checks
@@ -314,11 +314,11 @@ def parse_email_and_name(email_header_item):
             name = [None]
         # no email found - non breaking error
         if len(email) == 0:
-            logging.info('- - - - - - - EMAIL ERROR - - - - - - - ')
+            logging.info('- - - - - - - failed to extract email for %s - - - - - - - '%msg_id)
             clean_header_item.append([None, None])
         # two emails in one header item - non breaking error, something is wrong.
         elif len(email) > 1 or len(name) > 1:
-            logging.info('- - - - - - - ERROR MORE THAN ONE EMAIL IN HEADER ITEM - - - - - - - ')
+            logging.critical('- - - - - - - CRITICAL ERROR MORE THAN ONE EMAIL IN HEADER ITEM for  %s- - - - - - - '%msg_id)
             clean_header_item.append([None, None])
         # return so long as neither of the above happened
         else:
@@ -367,6 +367,7 @@ def get_body_using_mimetype(parts, mimetype='text/plain'):
     for body in parts:
         if body.get('mimeType') == mimetype:
             if not body.get('body',{}).get('data'):
+                logging.info(pformat(body))
                 logging.info('ERROR - this mimetype body has no data...!')
                 return None
             else:
@@ -517,8 +518,8 @@ def enrich_message(message):
     # TODO: get_cc
     # TODO: get_bcc
     # parse header item string into structured obj
-    header_from = parse_email_and_name(header_from)
-    header_to = parse_email_and_name(header_to)
+    header_from = parse_email_and_name(header_from, message_id)
+    header_to = parse_email_and_name(header_to, message_id)
     # logging.info('-----ENRICHEMNT VALUES-----')
     # logging.info('from' + str(header_from))
     # logging.info('to' + str(header_to))
@@ -553,6 +554,7 @@ def enrich_message(message):
     parsed_email = parse_email(body_html, body_plain, header_from[0][0], header_from[0][1], header_to[0][0])
     # buid return object
     msg = {
+        'A': '---------------------------------------------------------------------------',
         'GMAIL': {'spacer': {'spacer': message}},
         'h_from': header_from,
         'h_to': header_to,
@@ -582,54 +584,54 @@ def enrich_message(message):
 if __name__ == '__main__':
     START_TIME = time.time()
 
-    def hitlist(results_max):
-        ''' move this to own file, here for explanatory reasons for now'''
-        # thread_ob = ListThreadsWithLabels(service,'me','INBOX')
-        # threads = list_threads_matching_query(service, 'me', 'From:me',100)
-        msg_ids = msg_ids_from_query(service, 'me', 'from: me', results_max)
-        # logging.info(msg_ids)
-        # messages is now a list of ids and thread ids
-        # get messages
-        output = []
-        for idx, message in enumerate(msg_ids):
-            logging.info('getting message %d'%(idx+1))
-            m_id = message['id']
-            message = get_single_message(service, 'me', m_id)
-            to_header = get_to(message)
-            people = parse_email_and_name(str(to_header))
-            for person in people:
-                output.append(person)
-                with open("email_store.txt", "a") as myfile:
-                    myfile.write(str(person)+'•\n')
-        output = flatten(output)
-        # out = set(output)
-        logging.info(output)
-        logging.info("finished")
-            # pprint(to_field)
+    # def hitlist(results_max):
+    #     ''' move this to own file, here for explanatory reasons for now'''
+    #     # thread_ob = ListThreadsWithLabels(service,'me','INBOX')
+    #     # threads = list_threads_matching_query(service, 'me', 'From:me',100)
+    #     msg_ids = msg_ids_from_query(service, 'me', 'from: me', results_max)
+    #     # logging.info(msg_ids)
+    #     # messages is now a list of ids and thread ids
+    #     # get messages
+    #     output = []
+    #     for idx, message in enumerate(msg_ids):
+    #         logging.info('getting message %d'%(idx+1))
+    #         m_id = message['id']
+    #         message = get_single_message(service, 'me', m_id)
+    #         to_header = get_to(message)
+    #         people = parse_email_and_name(str(to_header))
+    #         for person in people:
+    #             output.append(person)
+    #             with open("email_store.txt", "a") as myfile:
+    #                 myfile.write(str(person)+'•\n')
+    #     output = flatten(output)
+    #     # out = set(output)
+    #     logging.info(output)
+    #     logging.info("finished")
+    #         # pprint(to_field)
 
-    def hitlist_batch(results_max):
-        ''' move this to own file, here for explanatory reasons for now
-        re-write the hit list function above using gmail batch
-        '''
-        # get message ids eg [{id: X, threadId: Y} , {id: X, threadId: Y}, etc ]
-        msg_ids = msg_ids_from_query(service, 'me', 'from: me', results_max)
-        # split list of id's into batches of 2000
-        logging.info('getting messages from %d ids'%len(msg_ids))
-        messages = get_messages_batch(service, 'me', msg_ids)
-        logging.info('retrieved %d messages'%len(messages))
-        output = []
-        for idx, message in enumerate(messages):
-            logging.info('msg %d'%(idx+1))
-            to_header = get_to(message)
-            people = parse_email_and_name(str(to_header))
-            for person in people:
-                output.append(person)
-                with open("email_store.txt", "a") as myfile:
-                    myfile.write(str(person)+'•\n')
-        output = flatten(output)
-        # out = set(output)
-        logging.info(output)
-        logging.info("finished")
+    # def hitlist_batch(results_max):
+    #     ''' move this to own file, here for explanatory reasons for now
+    #     re-write the hit list function above using gmail batch
+    #     '''
+    #     # get message ids eg [{id: X, threadId: Y} , {id: X, threadId: Y}, etc ]
+    #     msg_ids = msg_ids_from_query(service, 'me', 'from: me', results_max)
+    #     # split list of id's into batches of 2000
+    #     logging.info('getting messages from %d ids'%len(msg_ids))
+    #     messages = get_messages_batch(service, 'me', msg_ids)
+    #     logging.info('retrieved %d messages'%len(messages))
+    #     output = []
+    #     for idx, message in enumerate(messages):
+    #         logging.info('msg %d'%(idx+1))
+    #         to_header = get_to(message)
+    #         people = parse_email_and_name(str(to_header))
+    #         for person in people:
+    #             output.append(person)
+    #             with open("email_store.txt", "a") as myfile:
+    #                 myfile.write(str(person)+'•\n')
+    #     output = flatten(output)
+    #     # out = set(output)
+    #     logging.info(output)
+    #     logging.info("finished")
 
     # hitlist(100)
     # hitlist_batch(200)
