@@ -5,7 +5,7 @@ import base64
 from pprint import pprint
 import re
 
-from get_messages import enrich_message, get_msgs_from_query
+from get_messages import enrich_message, get_msgs_from_query, flatten
 # import gmail_helper   # has some issues with relative import - libs perhaps ASK_MARTIN
 from gmail_quickstart import get_credentials
 # from text_processing import reply_parser  # was causing import erros MARTIN_NOTE
@@ -16,10 +16,12 @@ import logging
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
+import pandas as pd
+
 SERVICE = get_credentials()
 QUERY = 'from:me'
 USER_ID = 'me'
-NUM = 100
+NUM = 1000
 
 
 def main():
@@ -40,9 +42,20 @@ def main():
     logging.debug('--------------------------------------------------------------------------')
     # logging.debug(pformat(msgs, depth=3))
     logging.debug('for followups, number of msgs pre filtering = ' + str(len(msgs)))
-    msgs_from = [msg['h_from'] for msg in msgs]
+    msgs_from = flatten([msg['h_from'] for msg in msgs])
     logging.debug(pformat(msgs_from))
-
+    # for some reason gmail's query 'from:me' includes some messages NOT from me. 
+    # Most ARE from me though
+    # quick pivot table
+    email_pivot = {}
+    for item in msgs_from:
+        email = item[0]
+        email_pivot[email] = email_pivot.get(email, 0) + 1
+    # convert to %
+    for k, v in email_pivot.items():
+        email_pivot[k] = email_pivot[k] / len(msgs_from)
+    
+    logging.debug(pformat(email_pivot))
     # 2 TODO write function for detecting user's aliases
 
     # filter messages by those that don't include a question mark
