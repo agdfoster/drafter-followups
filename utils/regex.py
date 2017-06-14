@@ -10,7 +10,7 @@
 
 import re
 
-def match(string, regex_string_literal, flags=None):
+def match(string, regex_string_literal, flags=0):
     ''' returns true / false based on re match'''
     reg = re.compile(regex_string_literal, flags)
     # get match object, use search as match is anchored at string start
@@ -22,9 +22,10 @@ def match(string, regex_string_literal, flags=None):
     if not match_object:
         return None
 
-def extract(string, regex_string_literal, flags=None):
+def extract(string, regex_string_literal, flags=0):
     ''' returns true / false based on re match'''
-    reg = re.compile(regex_string_literal, flags)
+    
+    reg = re.compile(regex_string_literal, flags=flags)
     # get match object, use search as match is anchored at string start
     match_object = reg.search(string)
     # now query the match object for what you want
