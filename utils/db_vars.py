@@ -1,8 +1,9 @@
 ''' this is the database for the Prodbot - temporary '''
 from pymongo import MongoClient
-MONGODB_URI = "mongodb://heroku_gh025bzj:obo29fmtaec5i8nonfrla7a064@ds133261.mlab.com:33261/heroku_gh025bzj"
+MONGODB_URI = os.environ['MONGODB_URI']
 client = MongoClient(MONGODB_URI)
-db = client.heroku_gh025bzj
+# db = client.heroku_gh025bzj
+db = client.get_default_database() # this get's default db
 # cursor = db.prodBot  # for skipping the collection naming step
 
 if __name__ == '__main__':
