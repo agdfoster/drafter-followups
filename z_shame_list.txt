@@ -1,0 +1,4 @@
+
+
+CC - if you delete a recip from TO and only have a recip in cc - will not be able to draft to them as doesn't detect CCs
+NTS - if you send a note to self (in aliases) and have no one in cc or bcc - it's a note to self.

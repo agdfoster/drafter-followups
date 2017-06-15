@@ -19,6 +19,7 @@ from googleapiclient import errors
 from utils.deep_get import deep_get, deep_get_all
 from text_processing.reply_parser import parse_email
 from gmail_quickstart import get_credentials
+from utils import regex
 
 service = get_credentials()
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
@@ -107,7 +108,7 @@ def ListThreadsWithLabels(service, user_id, label_ids=[]):
     except errors.HttpError as error:
         logging.info('An error occurred: %s' % error)
 #
-def msg_ids_from_query(service, user_id, query='', max_results=100): #100=default to 1 pg of results
+def msg_ids_from_query(service, user_id, query='', max_results=100, after=None, before=None): #100=default to 1 pg of results
     """List all Messages of the user's mailbox matching the query.
 
         Args:
@@ -121,7 +122,33 @@ def msg_ids_from_query(service, user_id, query='', max_results=100): #100=defaul
         List of Messages that match the criteria of the query. Note that the
         returned list contains Message IDs, you must use get with the
         appropriate ID to get the details of a Message.
+
+        'after' should be a timestamp or gmail date string, 
+        query will return only messages AFTER that date.
+        'before' is the same but will return messages BEFORE that date.
+
+        NOTE - this function is now unstable with before/after
+        as you do not know how many results you are going to get.
+        TODO - think up some situations and get it to handle them.
         """
+    # add dates to the query
+    if after:
+        if isinstance(after, int):
+            # sometimes timestamp is 1000 times larger (miliseconds)
+            if after > 1000000000000: after = after/1000
+            # format date string in gmail query format
+            after = datetime.fromtimestamp(after).strftime('%Y/%m/%d')
+        if isinstance(after, str):
+            query = 'after:' + after + ' ' + query
+    if before:
+        if isinstance(before, int):
+            # sometimes timestamp is 1000 times larger (miliseconds)
+            if before > 1000000000000: before = before/1000
+            # format date string in gmail query format
+            before = datetime.fromtimestamp(before).strftime('%Y/%m/%d')
+        if isinstance(before, str):
+            query = 'before:' + before + ' ' + query
+    logging.debug('searching using query = %s'%query)
     try:
         response = service.users().messages().list(userId=user_id, q=query).execute()
         logging.info('getting message IDs from gmail page 1')
@@ -236,8 +263,10 @@ def get_msgs_from_query(service, user_id, query, max_results=50, start=0):
     and get messages batch. reccommended not to exceed 50 results
     > note that start point is not an offset... 
     ... 2000 results starting at 1999 returns 1 result'''
+    # get message IDs
     logging.info('-----getting message IDs-----')
     msg_ids = msg_ids_from_query(service, user_id, query, max_results)
+    # get messages (using list of IDs)
     logging.info('-----getting messages from IDs-----')
     messages = get_messages_batch_throttled(service, user_id, msg_ids, start)
     logging.info('-----got %d messages-----'%len(messages))
@@ -249,13 +278,22 @@ def get_msgs_from_query(service, user_id, query, max_results=50, start=0):
 ####################################################################################
 
 def get_to(headers):
-    ''' get just the to field of a message'''
+    ''' get just the to field of a message
+    Note: 'Delivered to' originally I thought was valuable but it
+    looks like just 'To' is all you need'''
     # headers = message['payload']['headers']
-    for item in headers:
+    # for item in headers:
         # ran a test on 1000 emails and only found the below using vague set ['to','To','TO']
-        if item['name'] in ['To', 'Delivered-To', 'In-Reply-To']:
-            return item
+        # if item['name'] == 'Delivered-To': # removed 'In-Reply-To'
+        #     if regex.match(item['value'], r'@'): # has an email in it
+        #         return item
+    # used to be 'if item in' but split it so that it always takes delivered to if it finds it
+    for item in headers:
+        if item['name'] == 'To':
+            if regex.match(item['value'], r'@'): # has an email in it
+                return item
 #
+
 def get_from(headers):
     ''' get just the to field of a message'''
     # headers = deep_get_all[message, 'headers']
@@ -304,7 +342,7 @@ def parse_email_and_name(email_header_item, msg_id):
         person = str(person)
         # logging.info('person = %s'%person)
         email = re.findall(r'<([^@]+?@[^@]+?)>', person)
-        name = re.findall(r'([A-Za-z][^ „‚“‟‘‛"”’"❛❜❝❞❮❯<>〝〞＂]+).*?<', person)
+        name = re.findall(r'([A-Za-z][^ „‚“‟‘‛"()”’"❛❜❝❞❮❯<>〝〞＂]+).*?<', person)
         # logging.info('email = %s'%email)
         # backup parse method
         if len(email) == 0:
@@ -447,13 +485,13 @@ def categorize_message(message):
     parts = get_parts(message)
     if not parts:
         msg_type.append('no_parts')
-    
+
     # Get Mimetypes
     if parts:
         mimes = [deep_get_all(part, 'mimeType') for part in parts]
         mimes = flatten(mimes)
         # print('mimetypes found = ' + str(mimes))
-    
+
     # tag calendar invites
     for mime in mimes:
         if mime in ['text/calendar', 'application/ics']:
@@ -465,15 +503,21 @@ def categorize_message(message):
     if body_html and not body_html:
         msg_type.append('html_only')
 
-    # tag Forwarded message
+    # tag forwarded message
     header_subject = get_subject(message)
     is_fwd = header_subject.startswith('Fwd:')
-    if is_fwd: 
-        msg_type.append('Forward')
-    #
+    if is_fwd:
+        msg_type.append('forward')
+
+    # tag draft messages
+    labels = message.get('labelIds')
+    if labels:
+        if 'DRAFT' in labels:
+            msg_type.append('draft')
+
     # if len(msg_type) == 0: msg_type = None
     if len(msg_type) > 1: msg_type = set(msg_type)
-    return msg_type
+    return ', '.join(msg_type)
 
 ####################################################################################
 # QUOTED TEXT EXTRACTION AND BASIC MESSAGE SEGMENTATION
@@ -509,17 +553,24 @@ def enrich_message(message):
     thread_id = message.get('threadId')
     date_sent = message.get('internalDate')
     snippet = message.get('snippet')
+    labels = message.get('labelIds')
+
+    # concatenate label list for easier reading (can do if in just as easily)
+    if labels:
+        labels = ', '.join(labels)
     
     # get item out of headers
     headers = flatten(deep_get_all(message, 'headers'))
-    header_from = get_from(headers)
-    header_to = get_to(headers)
     header_subject = get_subject(message)
+    header_from = get_from(headers) # always there, always x1
+    header_to = get_to(headers) # if missing, might be just a cc/bcc
+    header_cc = get_message_header_item(message, 'Cc')
     # TODO: get_cc
     # TODO: get_bcc
     # parse header item string into structured obj
     header_from = parse_email_and_name(header_from, message_id)
     header_to = parse_email_and_name(header_to, message_id)
+    header_to = list(filter(lambda x: x != None, header_to))
     # logging.info('-----ENRICHEMNT VALUES-----')
     # logging.info('from' + str(header_from))
     # logging.info('to' + str(header_to))
@@ -563,19 +614,22 @@ def enrich_message(message):
         'date_sent': date_sent,
         'm_snippet': snippet,
         'm_subject': header_subject,
+        'm_body_stripped': parsed_email['body'],
         'm_body': {
                 'html': body_html,
                 'plain': body_plain,
                 'html2text': body_html2text,
                 'plain_no_breaks': body_plain_no_breaks,
-                'plain_stripped': parsed_email['body'],
                 'greeting': parsed_email['greeting'],
                 'signature': parsed_email['signature'],
                 'signoff': parsed_email['signoff']
                 },
         '_message_type': message_type
     }
+    # few final touches
+    # TODO add_conv_with(msg)
     return msg
+#
 
 ####################################################################################
 # DEV USE LOGIC
@@ -641,12 +695,12 @@ if __name__ == '__main__':
 
     for i, msg in enumerate(msgs):
         logging.info('----- msg %d stripped text-----'%i)
-        logging.info(msg['m_body']['plain_stripped'])
+        logging.info(msg['m_body_stripped'])
     
     # INVESTIGATE MSGS with 0 length body_stripped
     msgs_failed_strip = [
         msg for msg in msgs 
-        if len(msg['m_body']['plain_stripped']) < 10
+        if len(msg['m_body_stripped']) < 10
         and not msg['_message_type'] == 'calendar_invite'
     ]
     # logging.info(pformat(msgs_failed_strip, depth=4))

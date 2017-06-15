@@ -3,4 +3,4 @@
 .DS_Store
 /email_store.txt
 /email_store_old.txt
-/client_secret.json
+client_secret.json
