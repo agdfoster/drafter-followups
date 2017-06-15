@@ -18,10 +18,14 @@ import logging
 from googleapiclient import errors
 from utils.deep_get import deep_get, deep_get_all
 from text_processing.reply_parser import parse_email
-from gmail_quickstart import get_credentials
+# from gmail_quickstart import get_credentials
+import google_auth
 from utils import regex
 
-service = get_credentials()
+USER = {
+    'googleRefreshToken': '1/tEQsqzKONt7h9BbTsG-x3pWu6XYBt-7UF1m_CxH7nc8'
+}
+service = google_auth.get_service(USER, 'gmail')
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
