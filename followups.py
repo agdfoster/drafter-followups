@@ -4,22 +4,28 @@ import httplib2
 import base64
 from pprint import pprint
 import re
+from pprint import pformat
+
+import google_auth
 
 from get_messages import enrich_message, get_msgs_from_query, flatten
 from get_messages2 import get_messages_from_dates_and_threads
 # import gmail_helper   # has some issues with relative import - libs perhaps ASK_MARTIN
-from gmail_quickstart import get_credentials
+# from gmail_quickstart import get_credentials
 from utils import regex
 from utils.db_vars import *
 # from text_processing import reply_parser  # was causing import erros MARTIN_NOTE
 
 # logger
-from pprint import pformat
+
 import logging
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
-SERVICE = get_credentials()
+USER = {
+    'googleRefreshToken': '1/tEQsqzKONt7h9BbTsG-x3pWu6XYBt-7UF1m_CxH7nc8'
+}
+SERVICE = google_auth.get_service(USER, 'gmail')
 QUERY = 'from:me'
 USER_ID = 'me'
 ALIASES = ['foster@drafterhq.com', 'foster@drafter.email', 'foster@draft-ai.com']

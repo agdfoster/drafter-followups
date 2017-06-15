@@ -3,8 +3,8 @@ import os
 
 from oauth2client import client
 # import googleapiclient
-import apiclient
-
+import httplib2
+from apiclient.discovery import build
 
 CLIENT_ID = os.environ['GOOGLE_OAUTH_CLIENT_ID']
 CLIENT_SECRET = os.environ['GOOGLE_OAUTH_CLIENT_SECRET']
@@ -34,4 +34,4 @@ def get_service(user, service, version='v1'):
 
     http = credentials.authorize(httplib2.Http())
 
-    return apiclient.discovery.build(service, version, http=http)
+    return build(service, version, http=http)

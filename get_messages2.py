@@ -5,11 +5,13 @@ import logging
 from pprint import pformat
 import time
 
+import google_auth
 from googleapiclient import errors
 from googleapiclient.http import BatchHttpRequest
-from gmail_quickstart import get_credentials
+# from gmail_quickstart import get_credentials
 
-service = get_credentials()
+USER = {'googleRefreshToken': '1/tEQsqzKONt7h9BbTsG-x3pWu6XYBt-7UF1m_CxH7nc8'}
+service = google_auth.get_service(USER, 'gmail')
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
