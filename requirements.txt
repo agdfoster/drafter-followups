@@ -103,7 +103,7 @@ jsonschema==2.5.1
 # jupyter-console==5.0.0
 # jupyter-core==4.2.1
 lazy-object-proxy==1.2.2
-llvmlite==0.15.0
+# llvmlite==0.15.0
 locket==0.2.0
 lxml==3.7.2
 MarkupSafe==0.23
