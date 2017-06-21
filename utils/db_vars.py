@@ -1,5 +1,6 @@
 ''' this is the database for the Prodbot - temporary '''
 from pymongo import MongoClient
+import os
 MONGODB_URI = os.environ['MONGODB_URI']
 client = MongoClient(MONGODB_URI)
 # db = client.heroku_gh025bzj
