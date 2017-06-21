@@ -7,7 +7,6 @@ import re
 from pprint import pformat
 
 import google_auth
-
 from get_messages import enrich_message, get_msgs_from_query, flatten
 from get_messages2 import get_messages_from_dates_and_threads
 # import gmail_helper   # has some issues with relative import - libs perhaps ASK_MARTIN
@@ -30,7 +29,7 @@ QUERY = 'from:me'
 USER_ID = 'me'
 ALIASES = ['foster@drafterhq.com', 'foster@drafter.email', 'foster@draft-ai.com']
 NUM = 200
-AFTER = '2017/01/10'
+AFTER = '2017/06/10'
 BEFORE = None
 db.msgs_without_to.drop()
 logging.info('logging db dropped')
