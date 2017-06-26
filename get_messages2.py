@@ -4,6 +4,7 @@ from datetime import datetime
 import logging
 from pprint import pformat
 import time
+from datetime import datetime, timedelta
 
 import google_auth
 from googleapiclient import errors
@@ -15,7 +16,18 @@ service = google_auth.get_service(USER, 'gmail')
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
-def get_messages_from_dates_and_threads(service, user_id, before=None, after=None):
+def define_search_period(no_days_to_back_search):
+    '''returns an "AFTER" date string relative to todays date
+    for a given number of days in the past 
+    NOTE: assume this run in the morning, local time
+    NOTE: AFTER date in gmail *includes* that day. E.g, AFTER:2017/01/01 includes email ON 1st jan'''
+    now = datetime.today()
+    dif = timedelta(days=no_days_to_back_search)
+    output_date_for_AFTER = now - dif
+    output_string = output_date_for_AFTER.strftime("%Y/%m/%d")
+    return output_string
+
+def get_messages_from_dates_and_threads(service, user_id, before=None, after=None, max_results=100):
     ''' Super advanced tech :) we get a list of messages based on a before or after
     time-date (unix or gmail format) and return all messages matching that query
     ACROSS THREADS. I.e, if the most recent message fits the query - the whole thread
@@ -46,7 +58,11 @@ def get_messages_from_dates_and_threads(service, user_id, before=None, after=Non
         if isinstance(before, str):
             query = 'before:' + before + ' '
     logging.info('searching using query = %s'%query)
-    # make query
+    #--------------------------------------------------------------------------------
+    # THREAD IDS
+    # make query for message/thread IDs
+    #--------------------------------------------------------------------------------
+
     try:
         response = service.users().threads().list(userId=user_id, q=query).execute()
         logging.info('getting message IDs from gmail page 1')
@@ -69,6 +85,12 @@ def get_messages_from_dates_and_threads(service, user_id, before=None, after=Non
     logging.info('retrieved %d thread_ids'%len(thread_ids))
     # now get the msg_ids for msgs in each of those thread_ids
 
+    # MAX RESULTS
+    # if a max results is set, limit the number of batch requests to make.
+    if len(thread_ids) > max_results:
+        logging.info("found %d threads for query, limiting to %d threads, the max_results param"%(len(thread_ids), max_results))
+        thread_ids = thread_ids[:max_results]
+
     # 1 you could get them one at a time... NAAAH
     # for thread_id in thread_ids:
     #     thread = service.users().threads().get(userId=user_id, id=thread_id).execute()
@@ -78,8 +100,12 @@ def get_messages_from_dates_and_threads(service, user_id, before=None, after=Non
         #     logging.debug(date)
         # logging.info(pformat(thread['messages'], depth=3))
 
+    #--------------------------------------------------------------------------------
+    # GET MESSAGES
+    # Make a batch request (and throttle it) to get message objects.
+    #--------------------------------------------------------------------------------
     # 2 do them in a batch request
-    logging.info('starting batch requests')
+    logging.info('starting batch requests for %d threads'%len(thread_ids))
 
     n = 50 # recommended figure from google for all batch APIs
     sleep = 0.2 # setting to 0 works but unsafe incase of extra fast callbacks. only 10% speed benefits beyond 0.2s in tests

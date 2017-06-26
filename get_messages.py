@@ -27,7 +27,7 @@ USER = {
 }
 service = google_auth.get_service(USER, 'gmail')
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
 # logger
 # import logging
@@ -152,7 +152,7 @@ def msg_ids_from_query(service, user_id, query='', max_results=100, after=None, 
             before = datetime.fromtimestamp(before).strftime('%Y/%m/%d')
         if isinstance(before, str):
             query = 'before:' + before + ' ' + query
-    logging.debug('searching using query = %s'%query)
+    logging.info('searching using query = %s'%query)
     try:
         response = service.users().messages().list(userId=user_id, q=query).execute()
         logging.info('getting message IDs from gmail page 1')
@@ -318,7 +318,9 @@ def get_message_header_item(message, header_name):
     try:
         value = next(header['value'] for header in headers if header['name'] == header_name)
     except StopIteration:
-        logging.warning('Could not find header "%s" in message "%s"', header_name, message['id'])
+        # most messages don't have cc so don't log for that. 
+        if header_name != 'Cc':
+            logging.warning('Could not find header "%s" in message "%s"', header_name, message['id'])
         return ''
 
     return value
@@ -356,7 +358,7 @@ def parse_email_and_name(email_header_item, msg_id):
             name = [None]
         # no email found - non breaking error
         if len(email) == 0:
-            logging.info('- - - - - - - failed to extract email for %s - - - - - - - '%msg_id)
+            logging.debug('- - - - - - - failed to extract email for %s - - - - - - - '%msg_id)
             clean_header_item.append([None, None])
         # two emails in one header item - non breaking error, something is wrong.
         elif len(email) > 1 or len(name) > 1:
@@ -389,11 +391,13 @@ def get_parts(message):
         # I think this is having minimal effect
         body = deep_get(message, 'body')
         if body:
-            logging.warning('COULD NOT FIND PART - FOUND BODY INSTEAD')
+            logging.debug('COULD NOT FIND PART - FOUND BODY INSTEAD')
+            # TODO THERE IS SOMETHING DODGE ABOUT THIS - returns HTML body ...
+            # ...generally and pretty sure these messages are junk
             # now rebuild parts component
             parts = [{'body': body}]
         elif not body:
-            logging.info('failed to find parts')
+            logging.debug('failed to find parts')
             return None
         # import pprint
         # pprint.pprint(message)
@@ -409,7 +413,7 @@ def get_body_using_mimetype(parts, mimetype='text/plain'):
     for body in parts:
         if body.get('mimeType') == mimetype:
             if not body.get('body',{}).get('data'):
-                logging.info(pformat(body))
+                # logging.info(pformat(body))
                 logging.info('ERROR - this mimetype body has no data...!')
                 return None
             else:
@@ -462,13 +466,13 @@ def get_message_body(message):
     if body_plain_b64:
         body_plain = decode_b64(body_plain_b64)
     elif not body_plain_b64:
-        logging.info('failed to get body_plain_bs4 from mimetype')
+        logging.debug('failed to get body_plain_bs4 from mimetype')
         body_plain = None
     body_html_b64 = get_body_using_mimetype(parts, mimetype='text/html')
     if body_html_b64:
         body_html = decode_b64(body_html_b64)
     elif not body_html_b64:
-        logging.info('failed to get body_html_bs4 from mimetype')
+        logging.debug('failed to get body_html_bs4 from mimetype')
         body_html = None
     # return body
     body = {
@@ -584,7 +588,11 @@ def enrich_message(message):
     # for thread integrity it's important not to lose messages where possible
     body_plain = get_message_body(message)['body_plain']
     body_html = get_message_body(message)['body_html']
-    if body_html: body_html2text = html2text(body_html)
+    if body_html:
+        try:
+            body_html2text = html2text(body_html)
+        except:
+            body_html2text = None
     else: body_html2text = None
     # some messages are just a blank message
     if not body_plain and snippet in ['', ' ', None]:
@@ -592,10 +600,10 @@ def enrich_message(message):
     # if get message body fails...
     if not isinstance(body_plain, str) and not message_type:
         # there are legitimate reasons for no body eg: cal invite
-        logging.info('message type = ' + str(message_type))
+        logging.debug('message type = ' + str(message_type))
         # otherwise - debug or ignore
-        logging.info('failed this payload: type: ' + str(body_plain))
-        logging.info(pformat(message))
+        logging.debug('failed this payload: type: ' + str(body_plain))
+        # logging.info(pformat(message))
     # create another message body which is more readable
     if isinstance(body_plain, str):
         # 1 replace paragraphs with '•••'
