@@ -4,7 +4,7 @@ import os
 MONGODB_URI = os.environ['MONGODB_URI']
 client = MongoClient(MONGODB_URI)
 # db = client.heroku_gh025bzj
-db = client.get_default_database() # this get's default db
+    db = client.get_default_database() # this get's default db
 # cursor = db.prodBot  # for skipping the collection naming step
 
 if __name__ == '__main__':
