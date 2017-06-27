@@ -15,8 +15,9 @@ from get_messages2 import get_messages_from_dates_and_threads, define_search_per
 # import gmail_helper   # has some issues with relative import - libs perhaps ASK_MARTIN
 # from gmail_quickstart import get_credentials
 from utils import regex
+# database
 from utils.db_vars import *
-# from text_processing import reply_parser  # was causing import erros MARTIN_NOTE  
+# from text_processing import reply_parser  # was causing import erros MARTIN_NOTE
 
 # logger
 
@@ -24,6 +25,7 @@ import logging
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
+# . env_vars.sh <<< TO RUN ENV VARS LOCALLY
 USER = {'googleRefreshToken': '1/tEQsqzKONt7h9BbTsG-x3pWu6XYBt-7UF1m_CxH7nc8'}
 SERVICE = google_auth.get_service(USER, 'gmail')
 # QUERY = 'from:me'
@@ -279,7 +281,9 @@ def main(msgs):
 
 if __name__ == '__main__':
     # get messages from cache
-    msgs = get_msgs_from_cache()
+    # msgs = get_msgs_from_cache()
+    # or get msgs from API (and repopulate cache)
+    msgs = get_msgs_enrich_then_cache_em()
     # execute logic
     main(msgs)
     logging.info('finished')

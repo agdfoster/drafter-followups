@@ -6,9 +6,16 @@ app = Flask(__name__)
 
 import logging
 import httplib2
+import json
+from pprint import pprint
+from datetime import datetime
+
 from oauth2client.client import flow_from_clientsecrets
 from oauth2client.client import FlowExchangeError
 from apiclient.discovery import build
+
+# database
+from utils.db_vars import *
 
 CLIENTSECRETS_LOCATION = 'client_id_2.JSON'
 REDIRECT_URI = 'http://localhost:5000' #'<YOUR_REGISTERED_REDIRECT_URI>' # http://www.drafterhq.com?
@@ -47,41 +54,24 @@ class NoUserIdException(Exception):
 def show_html_to_user():
     pass
 
-def store_credentials(user_id, credentials):
-  """Store OAuth 2.0 credentials in the application's database.
-
-  This function stores the provided OAuth 2.0 credentials using the user ID as
-  key.
-
-  Args:
-    user_id: User's ID.
-    credentials: OAuth 2.0 credentials to store.
-  Raises:
-    NotImplemented: This function has not been implemented.
-  """
-  # TODO: Implement this function to work with your database.
-  #       To retrieve a Json representation of the credentials instance, call the
-  #       credentials.to_json() method.
-  raise NotImplementedError()
-
 def exchange_code(authorization_code):
-  """Exchange an authorization code for OAuth 2.0 credentials.
+    """Exchange an authorization code for OAuth 2.0 credentials.
 
-  Args:
+    Args:
     authorization_code: Authorization code to exchange for OAuth 2.0
                         credentials.
-  Returns:
+    Returns:
     oauth2client.client.OAuth2Credentials instance.
-  Raises:
+    Raises:
     CodeExchangeException: an error occurred.
-  """
-  flow = flow_from_clientsecrets(CLIENTSECRETS_LOCATION, ' '.join(SCOPES))
-  flow.redirect_uri = REDIRECT_URI
-  try:
-    credentials = flow.step2_exchange(authorization_code)
-    return credentials
-  except FlowExchangeError as error:
-    logging.error('An error occurred: %s', error)
+    """
+    flow = flow_from_clientsecrets(CLIENTSECRETS_LOCATION, ' '.join(SCOPES))
+    flow.redirect_uri = REDIRECT_URI
+    try:
+        credentials = flow.step2_exchange(authorization_code)
+        return credentials
+    except FlowExchangeError as error:
+        logging.error('An error occurred: %s', error)
     raise CodeExchangeException(None)
 
 def get_user_info(credentials):
@@ -146,13 +136,16 @@ def get_tokens_using_auth_code(authorization_code, state): # called get_credenti
   """
   email_address = ''
   try:
+    # exchange auth code for tokens
     credentials = exchange_code(authorization_code)
+    # get a few more details
     user_info = get_user_info(credentials)
     email_address = user_info.get('email')
     user_id = user_info.get('id')
+    # return and error handle
     if credentials.refresh_token is not None:
-      store_credentials(user_id, credentials)
-      return credentials
+        if user_id:
+            return credentials
     else:
       credentials = get_stored_credentials(user_id)
       if credentials and credentials.refresh_token is not None:
@@ -170,11 +163,42 @@ def get_tokens_using_auth_code(authorization_code, state): # called get_credenti
   authorization_url = get_authorization_url(email_address, state)
   raise NoRefreshTokenException(authorization_url)
 
-def put_tokens_in_db():
-    pass
+def put_token_in_db(credentials):
+    """Store OAuth 2.0 credentials in the application's database.
+
+    This function stores the provided OAuth 2.0 credentials using the user ID as
+    key.
+
+    Args:
+    user_id: User's ID.
+    credentials: OAuth 2.0 credentials to store.
+    Raises:
+    NotImplemented: This function has not been implemented.
+    """
+    user_info = get_user_info(credentials)
+    email_address = user_info.get('email')
+    user_id = user_info.get('id')
+
+    # Credentials come in a special object
+    # To retrieve a Json representation of the credentials instance, call the credentials.to_json() method.
+    # then convert to dict
+    creds = credentials.to_json()
+    creds = json.loads(creds)
+
+    db.creds.insert({
+        'user_info': user_info,
+        'user_id': user_id,
+        'user_email':email_address,
+        'creds': creds,
+        # 'credentials': credentials # this maintains attriutes of the class object
+        # 'datetime': datetime.now() # for easier access / duplicate removal
+    })
+    
+    return
+
 
 @app.route("/")
-def get_params():
+def get_and_store_tokens():
     ''' get URL parameters and return to the main program 
     flask function 'returns' directly the page'''
     # this function is called when a user authorises the app.
@@ -182,15 +206,14 @@ def get_params():
     # 1. get the auth code params from the URL
     state = request.args.get('state')
     code = request.args.get('code')
-    print(code)
     # 2. now ask Google for tokens
     # NOTE still don't know what state is.
-    tokens = get_tokens_using_auth_code(code, state)
-    print(tokens)
-
-
+    credentials = get_tokens_using_auth_code(code, state)
+    # store creds in db
+    put_token_in_db(credentials)
+    
     # the return is just what is handed to the page - give it the html you want it to have.
-    return '<h1>ok</h1>'
+    return '<h1>Connection Successful</h1>'
 
 
 if __name__ == '__main__':

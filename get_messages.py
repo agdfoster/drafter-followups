@@ -521,7 +521,7 @@ def categorize_message(message):
     labels = message.get('labelIds')
     if labels:
         if 'DRAFT' in labels:
-            msg_type += ', draft')
+            msg_type += ', draft'
 
     # if len(msg_type) == 0: msg_type = None
     if len(msg_type) > 1: msg_type = set(msg_type)
