@@ -9,12 +9,17 @@ from datetime import datetime, timedelta
 import google_auth
 from googleapiclient import errors
 from googleapiclient.http import BatchHttpRequest
+
 # from gmail_quickstart import get_credentials
+import gmail_service_obj
 
 USER = {'googleRefreshToken': '1/tEQsqzKONt7h9BbTsG-x3pWu6XYBt-7UF1m_CxH7nc8'}
-service = google_auth.get_service(USER, 'gmail')
+# service = google_auth.get_service(USER, 'gmail')
+service = gmail_service_obj.main()
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+# . env_vars.sh <<< TO RUN ENV VARS LOCALLY
+
 
 def define_search_period(no_days_to_back_search):
     '''returns an "AFTER" date string relative to todays date

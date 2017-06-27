@@ -503,25 +503,25 @@ def categorize_message(message):
     # tag calendar invites
     for mime in mimes:
         if mime in ['text/calendar', 'application/ics']:
-            msg_type.append('calendar_invite')
+            msg_type += ', calendar_invite'
 
     # tag HTML ONLY in body
     body_plain = get_message_body(message)['body_plain']
     body_html = get_message_body(message)['body_html']
     if body_html and not body_html:
-        msg_type.append('html_only')
+        msg_type += ', html_only'
 
     # tag forwarded message
     header_subject = get_subject(message)
     is_fwd = header_subject.startswith('Fwd:')
     if is_fwd:
-        msg_type.append('forward')
+        msg_type += ', forward'
 
     # tag draft messages
     labels = message.get('labelIds')
     if labels:
         if 'DRAFT' in labels:
-            msg_type.append('draft')
+            msg_type += ', draft'
 
     # if len(msg_type) == 0: msg_type = None
     if len(msg_type) > 1: msg_type = set(msg_type)
@@ -555,14 +555,13 @@ def enrich_message(message):
     msg replaces message to symbolise'''
     # categorize message
     message_type = categorize_message(message)
-    
     # ids etc
     message_id = message.get('id')
     thread_id = message.get('threadId')
-    date_sent = message.get('internalDate')
     snippet = message.get('snippet')
     labels = message.get('labelIds')
-
+    # date, convert to int
+    date_sent = int(message.get('internalDate'))
     # concatenate label list for easier reading (can do if in just as easily)
     if labels:
         labels = ', '.join(labels)
