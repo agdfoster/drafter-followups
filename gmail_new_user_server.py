@@ -1,4 +1,4 @@
-''' '''
+''' FLASK app that collects signups and populates the database'''
 # Flask boilerplate
 from flask import Flask
 from flask import request
@@ -18,7 +18,7 @@ from apiclient.discovery import build
 from utils.db_vars import *
 
 CLIENTSECRETS_LOCATION = 'client_id_2.JSON'
-REDIRECT_URI = 'http://localhost:5000' #'<YOUR_REGISTERED_REDIRECT_URI>' # http://www.drafterhq.com?
+REDIRECT_URI = os.environ['REDIRECT_URI'] # this is NOT the Google redirect URI. I don't get it either.
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/userinfo.email',
@@ -72,7 +72,7 @@ def exchange_code(authorization_code):
         return credentials
     except FlowExchangeError as error:
         logging.error('An error occurred: %s', error)
-    raise CodeExchangeException(None)
+        raise CodeExchangeException(None)
 
 def get_user_info(credentials):
   """Send a request to the UserInfo API to retrieve the user's information.
@@ -143,25 +143,23 @@ def get_tokens_using_auth_code(authorization_code, state): # called get_credenti
     email_address = user_info.get('email')
     user_id = user_info.get('id')
     # return and error handle
-    if credentials.refresh_token is not None:
+    if credentials.refresh_token:
         if user_id:
             return credentials
     else:
-      credentials = get_stored_credentials(user_id)
-      if credentials and credentials.refresh_token is not None:
-        return credentials
+        credentials = get_stored_credentials(user_id)
+        if credentials and credentials.refresh_token:
+            return credentials
   except CodeExchangeException as error:
-    logging.error('An error occurred during code exchange.')
-    # Drive apps should try to retrieve the user and credentials for the current
-    # session.
-    # If none is available, redirect the user to the authorization URL.
-    error.authorization_url = get_authorization_url(email_address, state)
-    raise error
+      logging.error('An error occurred during code exchange.')
+      # Drive apps should try to retrieve the user and credentials for the current
+      # session.
+      # If none is available, redirect the user to the authorization URL.
+      # error.authorization_url = get_authorization_url(email_address, state) # TODO TURN THIS BACK ON
+      raise error
   except NoUserIdException:
-    logging.error('No user ID could be retrieved.')
-  # No refresh token has been retrieved.
-  authorization_url = get_authorization_url(email_address, state)
-  raise NoRefreshTokenException(authorization_url)
+      logging.error('No user ID could be retrieved.')
+      # No refresh token has been retrieved.
 
 def put_token_in_db(credentials):
     """Store OAuth 2.0 credentials in the application's database.
@@ -185,7 +183,7 @@ def put_token_in_db(credentials):
     creds = credentials.to_json()
     creds = json.loads(creds)
 
-    db.creds.insert({
+    db.user_creds.insert({
         'user_info': user_info,
         'user_id': user_id,
         'user_email':email_address,

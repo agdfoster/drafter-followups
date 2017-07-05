@@ -6,16 +6,16 @@ from pprint import pformat
 import time
 from datetime import datetime, timedelta
 
-import google_auth
+# import google_auth
 from googleapiclient import errors
 from googleapiclient.http import BatchHttpRequest
 
 # from gmail_quickstart import get_credentials
-import gmail_service_obj
+import get_gmail_service_obj
 
-USER = {'googleRefreshToken': '1/tEQsqzKONt7h9BbTsG-x3pWu6XYBt-7UF1m_CxH7nc8'}
+# USER = {'googleRefreshToken': '1/tEQsqzKONt7h9BbTsG-x3pWu6XYBt-7UF1m_CxH7nc8'}
 # service = google_auth.get_service(USER, 'gmail')
-service = gmail_service_obj.main()
+service = get_gmail_service_obj.main()
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 # . env_vars.sh <<< TO RUN ENV VARS LOCALLY
@@ -113,7 +113,7 @@ def get_messages_from_dates_and_threads(service, user_id, before=None, after=Non
     logging.info('starting batch requests for %d threads'%len(thread_ids))
 
     n = 50 # recommended figure from google for all batch APIs
-    sleep = 0.2 # setting to 0 works but unsafe incase of extra fast callbacks. only 10% speed benefits beyond 0.2s in tests
+    sleep = 0.5 # setting to 0 works but unsafe incase of extra fast callbacks. only 10% speed benefits beyond 0.2s in tests
 
     # chunk up thread id list into lists of lists [[idslist],[idslist]]
     thread_id_chunks = [thread_ids[i:i + n] for i in range(0, len(thread_ids), n)]
