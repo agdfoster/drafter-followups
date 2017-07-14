@@ -1,20 +1,22 @@
+# encoding = utf-8
 ''' gets gmail messages and re-standardises the messages.
 my own set of gmail functions for getting emails from Gmail API.
 get_msgs_from_query is the big one. Uses batches and relies on a gmail query.
 
 '''
 
-import httplib2
+
 import base64
 import email
 import re
-from googleapiclient.http import BatchHttpRequest
 import time
 from pprint import pprint,pformat
 import math
-from html2text import html2text
 import logging
 
+import httplib2
+from html2text import html2text
+from googleapiclient.http import BatchHttpRequest
 from googleapiclient import errors
 from utils.deep_get import deep_get, deep_get_all
 from text_processing.reply_parser import parse_email

@@ -25,7 +25,7 @@ import logging
 
 # Necessary for using talon regexes
 import regex as re
-import probablepeople
+# import probablepeople
 
 
 import talon # was throwing an error - NOTE_MARTIN

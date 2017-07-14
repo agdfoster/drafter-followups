@@ -213,6 +213,9 @@ def get_and_store_tokens():
     # the return is just what is handed to the page - give it the html you want it to have.
     return '<h1>Connection Successful</h1>'
 
+def run():
+  app.run()
+
 
 if __name__ == '__main__':
     app.run()

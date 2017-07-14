@@ -15,7 +15,7 @@ from get_messages import enrich_message, get_msgs_from_query, flatten
 from get_messages2 import get_messages_from_dates_and_threads, define_search_period
 # import gmail_helper   # has some issues with relative import - libs perhaps ASK_MARTIN
 # from gmail_quickstart import get_credentials
-from utils import regex
+import utils.regex as regex
 # database
 from utils.db_vars import *
 # from text_processing import reply_parser  # was causing import erros MARTIN_NOTE
@@ -38,7 +38,7 @@ BEFORE = None
 # db.msgs_without_to.drop()
 # logging.info('logging db dropped')
 
-def get_msgs_enrich_then_cache_em():
+def get_msgs_enrich_then_cache_em(service):
     # get messages from me from last 3 months
     # 1 get all message IDs
     # V1
@@ -295,14 +295,33 @@ def draft_followups_wrapper(msgs_to_draft_for, fname, sname, user_id):
         num_drafts_successful += 1
     logging.info('{} of {} drafts drafted'.format(num_drafts_successful, len(msgs_to_draft_for)))
 
-if __name__ == '__main__':
+def run():
     start_timer = datetime.now()
     # service and vars
     service, fname, sname, email = get_gmail_service_obj.main()
     
     # get messages from cache or get msgs from API (and repopulate cache)
     # msgs = get_msgs_from_cache()
-    msgs = get_msgs_enrich_then_cache_em()
+    msgs = get_msgs_enrich_then_cache_em(service)
+    
+    # execute logic
+    msgs_to_draft_for = main(msgs)
+
+    # draft followups
+    draft_followups_wrapper(msgs_to_draft_for, fname, sname, email)
+
+    execution_time = datetime.now() - start_timer
+    logging.info('finished! Executed in {}s'.format(execution_time.total_seconds()))
+    return
+
+if __name__ == '__main__':
+    start_timer = datetime.now()
+    # service and vars
+    service, fname, sname, email = get_gmail_service_obj.main()
+    
+    # get messages from cache or get msgs from API (and repopulate cache)
+    msgs = get_msgs_from_cache()
+    # msgs = get_msgs_enrich_then_cache_em()
     
     # execute logic
     msgs_to_draft_for = main(msgs)
