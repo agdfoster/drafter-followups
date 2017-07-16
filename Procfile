@@ -1,1 +1,1 @@
-process: python followups.py
+process: python3 app.py
