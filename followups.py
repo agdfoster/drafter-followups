@@ -33,19 +33,21 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 # SERVICE = google_auth.get_service(USER, 'gmail')
 # QUERY = 'from:me'
 # USER_ID = 'me'
-NUM = 1000 # limit number of threads to fetch
-AFTER = define_search_period(3) # = '2017/06/10'
+NUM = 10000 # cap number of messages to get in one go. Keep high for onboarding.
+SEARCH_RANGE = 3 # <<<<<< NUMBER OF DAYS TO BACK SEARCH.
+# ^^^ TODO if you're running every day, this only needs to be 1.
+AFTER = define_search_period(SEARCH_RANGE)
 BEFORE = None
 # db.msgs_without_to.drop()
 # logging.info('logging db dropped')
 
-def get_msgs_enrich_then_cache_em(service):
+def get_msgs_enrich_then_cache_em(service, after=AFTER):
     # get messages from me from last 3 months
     # 1 get all message IDs
     # V1
     # messages = get_msgs_from_query(SERVICE, USER_ID, 'from:me', NUM, start=0) # VERSION 1
     # V2
-    messages = get_messages_from_dates_and_threads(service, after=AFTER, before=BEFORE, max_results=NUM) # VERSION 2
+    messages = get_messages_from_dates_and_threads(service, after=after, before=BEFORE, max_results=NUM) # VERSION 2
     logging.info('-----enriching %d messasges-----'%len(messages))
     msgs = []
     for i, message in enumerate(messages):
@@ -232,11 +234,10 @@ def msgs_req_followups(msgs, most_recent_msg_ids_from_threads, theshold_days):
         ]
     return msgs_fom_me_w_q_and_most_recent
 
-def main(user_email, msgs):
+def lazy_logic_holder(user_email, msgs, threshold_days=0):
     ''' run the logic to work out which messages to draft followups for
-    then DRAFT the response for those messages'''
-    # input vars
-    threshold_days = 0
+    then DRAFT the response for those messages
+    NOTE defaults to 0 days!!!!'''
     
     # in case the cache is running, convert from cursor object to list. Should do nothing if not cached.
     msgs = [msg for msg in msgs]
@@ -306,11 +307,8 @@ def draft_followups_wrapper(msgs_to_draft_for, fname, sname, user_id, service):
         num_drafts_successful += 1
     logging.info('{} of {} drafts drafted'.format(num_drafts_successful, len(msgs_to_draft_for)))
 
-def run():
+def main(user_emails, after=AFTER):
     start_timer = datetime.now()
-    
-    # get list of users [email, email, email]
-    user_emails = db.user_creds.distinct('user_email')
     
     # initiate draft log
     draft_logs = []
@@ -321,7 +319,7 @@ def run():
     # run function for each user in userlist.
     for user_email in user_emails:
         logging.info('•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••')
-        logging.info('•••••••••••••••••••••••••••••• RUNNING FOLLOWUPS FOR {} ••••••••••••••••••••••••••••'.format(user_email))
+        logging.info('••••••••••••••••••••••••• RUNNING FOLLOWUPS FOR {} •••••••••••••••••••••••'.format(user_email))
         logging.info('•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••')
         # service and vars
         service, fname, sname, email = get_gmail_service_obj.main(user_email)
@@ -329,10 +327,10 @@ def run():
         
         # get messages from cache or get msgs from API (and repopulate cache)
         # msgs = get_msgs_from_cache()
-        msgs = get_msgs_enrich_then_cache_em(service)
+        msgs = get_msgs_enrich_then_cache_em(service, after)
         
         # execute logic
-        msgs_to_draft_for = main(user_email, msgs)
+        msgs_to_draft_for = lazy_logic_holder(user_email, msgs)
 
         # draft followups
         draft_followups_wrapper(msgs_to_draft_for, fname, sname, email, service)
@@ -360,6 +358,14 @@ def run():
     logging.info('finished! Executed in {}s'.format(execution_time.total_seconds()))
     return
 
+def run():
+    # NOTE: onbaording runs off main()
+    
+    # get list of users [email, email, email]
+    user_emails = db.user_creds.distinct('user_email')
+    
+    main(user_emails)
+
 if __name__ == '__main__':
     logging.info('started')
     run()
@@ -382,6 +388,7 @@ if __name__ == '__main__':
 # >> ^^ maybe rather than a chron job, run regularly but have a db log and only run once / twice a day for each user.
 # ^^^ check 'is there a new user?' at start of main process and 
 
+# Revert SEARCH RANGE to 1.
 
 
 # Other Features
