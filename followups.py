@@ -1,3 +1,4 @@
+# coding=<utf-8>
 ''' find messages outoing from user with no reply and that we
 classify as followups (various conditions), then call the file that composes and drafts the email for us.
 This is the Main function file for the app.'''
@@ -31,7 +32,7 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 # USER = {'googleRefreshToken': '1/tEQsqzKONt7h9BbTsG-x3pWu6XYBt-7UF1m_CxH7nc8'} # this is historic, not sure what for.
 # SERVICE = google_auth.get_service(USER, 'gmail')
 # QUERY = 'from:me'
-USER_ID = 'me'
+# USER_ID = 'me'
 NUM = 1000 # limit number of threads to fetch
 AFTER = define_search_period(3) # = '2017/06/10'
 BEFORE = None
@@ -68,14 +69,16 @@ def get_aliases_from_db(user_id):
     ''' get users' aliases from db'''
     # get aliases from db TODO - ensure db has aliases (at least 'me ) and remove these hedges below
     try:
-        alias_object = db.aliases_list.find({'user_id': user_id})
-        aliases = [alias['alias_list'] for alias in alias_object]
+        if db.alias_list.count() == 0: raise TypeError("ALEX THIS COLLECTION IS NOT FOUND")
+        alias_object = db.alias_list.find({'user_id': user_id})
+        aliases = flatten([alias['alias_list'] for alias in alias_object])
+        if len(aliases) > 0:
+            logging.info('aliases = {}'.format(aliases))
+        else:
+            logging.info('no aliases found in db')
+        logging.info('user id = {}'.format(user_id))
     except:
         raise TypeError('FAILED TO GET ALIASES FROM DB')
-    if len(aliases) > 0:
-        logging.info('aliases = {}'.format(aliases))
-    else:
-        logging.info('no aliases found in db')
     return aliases
 
 def guess_primary_to_email(msg, aliases):
@@ -112,7 +115,6 @@ def enrich_2(msg, aliases):
     '''second enrich function adding more enrichments used by followup function
     >> '''
     # enrich msg direciton (inbound/outbound)
-    print(msg['h_from'][0][0], aliases)
     if msg['h_from'][0][0] in aliases: # only ever one 'from' email
         msg['direction'] = 'OUTBOUND'
     else:
@@ -226,7 +228,7 @@ def msgs_req_followups(msgs, most_recent_msg_ids_from_threads, theshold_days):
         ]
     return msgs_fom_me_w_q_and_most_recent
 
-def main(msgs):
+def main(user_email, msgs):
     ''' run the logic to work out which messages to draft followups for
     then DRAFT the response for those messages'''
     # input vars
@@ -240,20 +242,19 @@ def main(msgs):
 
     # get aliases
     logging.info('getting aliases...')
-    aliases = get_aliases_from_db(USER_ID)
+    aliases = get_aliases_from_db(user_email)
 
     # run enrich_2 on all msgs
     logging.info('starting enrichment 2')
-    for msg in msgs:
+    for idx, msg in enumerate(msgs):
         enrich_2(msg, aliases)
+        if idx % 50 == 0: logging.info('enriched msg {}'.format(idx))
+    logging.info('finished enrichment 2')
 
     # some info logs on message filters
     num_msgs_from_me = len(list([msg for msg in msgs if msg['direction'] == 'OUTBOUND']))
     num_msgs_fom_me_w_questions = len(list([msg for msg in msgs if msg['direction'] == 'OUTBOUND' and msg['question']]))
     num_msgs_missing_to = len(list([msg for msg in msgs if not msg['h_to_email_primary'] and msg['direction'] == 'OUTBOUND']))
-    logging.info('number of messages outbound = %d of %d'%(num_msgs_from_me, len(msgs)))
-    logging.info('number of messages outbound w questions = %d out of %d'%(num_msgs_fom_me_w_questions, num_msgs_from_me))
-    logging.info('number of messages outbound missing primary to = %d out of %d'%(num_msgs_missing_to, num_msgs_from_me))
 
     # TODO for now assume that primary to is good enough. You're probably going to reply to the last person you sent the message to.
 
@@ -266,6 +267,10 @@ def main(msgs):
 
     # log progress
     num_msgs_fom_me_w_q_and_most_recent = len(list([msg for msg in msgs if msg['direction'] == 'OUTBOUND' and msg['question'] and msg['id_message'] in most_recent_msg_ids]))
+    logging.info('aliases = {}'.format(aliases))
+    logging.info('number of messages outbound = %d of %d'%(num_msgs_from_me, len(msgs)))
+    logging.info('number of messages outbound w questions = %d out of %d'%(num_msgs_fom_me_w_questions, num_msgs_from_me))
+    logging.info('number of messages outbound missing primary to = %d out of %d'%(num_msgs_missing_to, num_msgs_from_me))
     logging.info('number of mesaged outbound w questions and is most recent = {} out of {}'.format(num_msgs_fom_me_w_q_and_most_recent, num_msgs_from_me))
 
     msgs_to_draft_for = msgs_req_followups(msgs, most_recent_msg_ids, threshold_days)
@@ -281,7 +286,7 @@ def main(msgs):
 
     return msgs_to_draft_for
 
-def draft_followups_wrapper(msgs_to_draft_for, fname, sname, user_id):
+def draft_followups_wrapper(msgs_to_draft_for, fname, sname, user_id, service):
     # Draft message! different function, make sure you keep people in cc and say hello to the right person.
     logging.info('asking gmail to draft {} messages'.format(len(msgs_to_draft_for)))
     num_drafts_successful = 0
@@ -297,37 +302,32 @@ def draft_followups_wrapper(msgs_to_draft_for, fname, sname, user_id):
 
 def run():
     start_timer = datetime.now()
-    # service and vars
-    service, fname, sname, email = get_gmail_service_obj.main()
     
-    # get messages from cache or get msgs from API (and repopulate cache)
-    # msgs = get_msgs_from_cache()
-    msgs = get_msgs_enrich_then_cache_em(service)
+    # get list of users [email, email, email]
+    user_emails = db.user_creds.distinct('user_email')
     
-    # execute logic
-    msgs_to_draft_for = main(msgs)
+    # run function for each user in userlist.
+    for user_email in user_emails:
+        logging.info('•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••')
+        logging.info('•••••••••••••••••••••••••••••• RUNNING FOLLOWUPS FOR {} ••••••••••••••••••••••••••••'.format(user_email))
+        logging.info('•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••')
+        # service and vars
+        service, fname, sname, email = get_gmail_service_obj.main(user_email)
+        logging.info('service object built')
+        
+        # get messages from cache or get msgs from API (and repopulate cache)
+        msgs = get_msgs_from_cache()
+        # msgs = get_msgs_enrich_then_cache_em(service)
+        
+        # execute logic
+        msgs_to_draft_for = main(user_email, msgs)
 
-    # draft followups
-    draft_followups_wrapper(msgs_to_draft_for, fname, sname, email)
-
+        # draft followups
+        draft_followups_wrapper(msgs_to_draft_for, fname, sname, email, service)
+        
     execution_time = datetime.now() - start_timer
     logging.info('finished! Executed in {}s'.format(execution_time.total_seconds()))
     return
 
 if __name__ == '__main__':
-    start_timer = datetime.now()
-    # service and vars
-    service, fname, sname, email = get_gmail_service_obj.main()
-    
-    # get messages from cache or get msgs from API (and repopulate cache)
-    msgs = get_msgs_from_cache()
-    # msgs = get_msgs_enrich_then_cache_em()
-    
-    # execute logic
-    msgs_to_draft_for = main(msgs)
-
-    # draft followups
-    draft_followups_wrapper(msgs_to_draft_for, fname, sname, email)
-
-    execution_time = datetime.now() - start_timer
-    logging.info('finished! Executed in {}s'.format(execution_time.total_seconds()))
+    run()

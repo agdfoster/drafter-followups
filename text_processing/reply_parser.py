@@ -25,7 +25,7 @@ import logging
 
 # Necessary for using talon regexes
 import regex as re
-# import probablepeople
+import probablepeople
 
 
 import talon # was throwing an error - NOTE_MARTIN
@@ -83,7 +83,7 @@ def get_greeting_name_variants(full_name):
     try:
         tagged_person, _ = probablepeople.tag(full_name)
     except probablepeople.RepeatedLabelError:
-        # print('Error parsing name "{full_name}"'.format(full_name=full_name))
+        print('Error parsing name "{full_name}"'.format(full_name=full_name))
         return [full_name]
 
     # print(tagged_person)

@@ -15,7 +15,7 @@ import get_gmail_service_obj
 
 # USER = {'googleRefreshToken': '1/tEQsqzKONt7h9BbTsG-x3pWu6XYBt-7UF1m_CxH7nc8'}
 # service = google_auth.get_service(USER, 'gmail')
-service = get_gmail_service_obj.main()
+service = get_gmail_service_obj.main('foster@draft-ai.com')
 logging.getLogger('googleapiclient').setLevel(logging. CRITICAL + 10)
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 # . env_vars.sh <<< TO RUN ENV VARS LOCALLY
@@ -32,7 +32,7 @@ def define_search_period(no_days_to_back_search):
     output_string = output_date_for_AFTER.strftime("%Y/%m/%d")
     return output_string
 
-def get_messages_from_dates_and_threads(service, user_id, before=None, after=None, max_results=100):
+def get_messages_from_dates_and_threads(service, before=None, after=None, max_results=100):
     ''' Super advanced tech :) we get a list of messages based on a before or after
     time-date (unix or gmail format) and return all messages matching that query
     ACROSS THREADS. I.e, if the most recent message fits the query - the whole thread
@@ -69,7 +69,7 @@ def get_messages_from_dates_and_threads(service, user_id, before=None, after=Non
     #--------------------------------------------------------------------------------
 
     try:
-        response = service.users().threads().list(userId=user_id, q=query).execute()
+        response = service.users().threads().list(userId='me', q=query).execute()
         logging.info('getting message IDs from gmail page 1')
         # cycle through pages
         thread_ids = []
@@ -79,7 +79,7 @@ def get_messages_from_dates_and_threads(service, user_id, before=None, after=Non
         while 'nextPageToken' in response:
             logging.info('getting message IDs from gmail page %d'%(pageno))
             page_token = response['nextPageToken']
-            response = service.users().threads().list(userId=user_id, q=query, pageToken=page_token).execute()
+            response = service.users().threads().list(userId='me', q=query, pageToken=page_token).execute()
             thread_ids.extend(response['threads'])
             pageno += 1
         logging.info('finished getting gmail msg IDs')

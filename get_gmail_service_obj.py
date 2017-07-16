@@ -6,13 +6,14 @@ from pprint import pprint
 import httplib2
 
 from apiclient.discovery import build
+# import googleapiclient
 import oauth2client
 import logging
 
 # database
 from utils.db_vars import *
 
-USER = 'foster@draft-ai.com'
+# USER = 'foster@draft-ai.com' # THIS SHOULD BE THE ONLY PLACE THIS VARIABLE IS STORED - IT IS TEMPORARY
 
 CLIENT_SECRET = os.environ['GOOGLE_OAUTH_CLIENT_SECRET']
 CLIENT_ID = os.environ['GOOGLE_OAUTH_CLIENT_ID']
@@ -20,7 +21,8 @@ CLIENT_ID = os.environ['GOOGLE_OAUTH_CLIENT_ID']
 def get_user_creds_from_db(user_email):
     ''' note that elsewhere we use user_id to refer to user_email 
     but gmail uses it's own user_id so I've called is user_email to be clear
-    NOTE: converts from db cursor object to normal object'''
+    NOTE: converts from db cursor object to normal object
+    NOTE: the email returned is 100% the email that the client should then be querying'''
     creds_list = db.user_creds.find({'creds.id_token.email': user_email})
     creds_list = [cred for cred in creds_list]
     if creds_list == []:
@@ -119,20 +121,36 @@ URL = https://accounts.google.com/o/oauth2/auth?client_id=691727597265-pgjisvia3
     response_type=code&
     approval_prompt=force'
 6. Look at that Oauth example you've saved here
+
+HM, OK... so refresh token seems to be lasting now.
+BUT the auth URL is still breaking after time.... AHA but it's the same every time right?
+... so that's just because I'm pressing back rather than re-using the URL. Stupid Alex.
+1. Waiting on test for this.
+
+TESTING WITH FOSTER@DRAFT-AI.COM
+1. need way to know which accounts emails it's polling.
 '''
 
 
-def main():
-    creds, fname, sname, email = get_user_creds_from_db(USER)
-    logging.info('acquired credentials for {}'.format(USER))
+def main(user_email):
+    # get user creds from db
+    logging.info('acquiring credentials for {}'.format(user_email))
+    creds, fname, sname, email = get_user_creds_from_db(user_email)
+    logging.info('acquiring credentials complete for {}'.format(user_email))
     # pprint(creds, depth=2)
+    
     # re-build credentials object from the Json-like mongo db object
+    logging.info('rebuilding credentials for {}'.format(user_email))
     credentials = rebuild_credentials_object_from_db_creds(creds)
+    logging.info('rebuilding credentials complete for {}'.format(user_email))
+    
     # build service object by authorizing credentials with Google
+    logging.info('building service object for {}'.format(user_email))
     service = get_service_martin(credentials)
+    logging.info('building service object complete for {}'.format(user_email))
 
     return service, fname, sname, email
 
 if __name__ == '__main__':
-    main()
+    main('foster@draft-ai.com')
     print('building service object seemed to work')

@@ -1,4 +1,4 @@
-# encoding = utf-8
+# coding=<utf-8>
 ''' gets gmail messages and re-standardises the messages.
 my own set of gmail functions for getting emails from Gmail API.
 get_msgs_from_query is the big one. Uses batches and relies on a gmail query.
