@@ -326,6 +326,12 @@ def run():
         draft_followups_wrapper(msgs_to_draft_for, fname, sname, email, service)
         
     execution_time = datetime.now() - start_timer
+    
+    # update the db draft_log
+    logging.info('updating the database draftlog')
+    batch = max(db.draft_log.distinct('batch')) + 1
+    db.draft_log.insert({'user_email': user_email, 'num_drafts': len(msgs_to_draft_for), 'date': datetime.now(), 'msgs_drafted_for': msgs_to_draft_for, 'batch': batch})
+    
     logging.info('finished! Executed in {}s'.format(execution_time.total_seconds()))
     return
 
