@@ -35,9 +35,11 @@ def CreateDraft(service, user_id, mime_message_to_send):
   """
   try:
     
-    draft = service.users().drafts().create(userId=user_id, body=mime_message_to_send).execute()
+    # draft = service.users().drafts().create(userId=user_id, body=mime_message_to_send).execute()
+    # REMEMBER TO TURN THE LOG BACK ON BELOW.
+    draft = ['this is fucking temporary yo']
 
-    logging.info( 'Draft id: %s\nDraft message: %s'%(draft['id'], draft['message']))
+    # logging.info( 'Draft id: %s\nDraft message: %s'%(draft['id'], draft['message']))
 
     return draft
   except errors.HttpError as error:

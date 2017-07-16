@@ -704,7 +704,10 @@ if __name__ == '__main__':
     # hitlist_batch(200)
     messages = get_msgs_from_query(service, 'me', 'from:me', 10, start=0)
     logging.info('-----enriching %d messasges-----'%len(messages))
-    msgs = [enrich_message(message) for message in messages]
+    msgs = []
+    for i, message in enumerate(messages):
+        msg = enrich_message(message)
+        if i % 50 == 0: logging.info('enriched msg {}'.format(i))
 
     for i, msg in enumerate(msgs):
         logging.info('----- msg %d stripped text-----'%i)

@@ -45,9 +45,13 @@ def get_msgs_enrich_then_cache_em(service):
     # V1
     # messages = get_msgs_from_query(SERVICE, USER_ID, 'from:me', NUM, start=0) # VERSION 1
     # V2
-    messages = get_messages_from_dates_and_threads(service, USER_ID, after=AFTER, before=BEFORE, max_results=NUM) # VERSION 2
+    messages = get_messages_from_dates_and_threads(service, after=AFTER, before=BEFORE, max_results=NUM) # VERSION 2
     logging.info('-----enriching %d messasges-----'%len(messages))
-    msgs = [enrich_message(message) for message in messages]
+    msgs = []
+    for i, message in enumerate(messages):
+        msg = enrich_message(message)
+        msgs.append(msg)
+        if i % 50 == 0: logging.info('enriched (1) msg {}'.format(i))
     msgs_no_body = [msg for msg in msgs if msg['m_body']['plain'] == None and msg['m_body']['html'] == None]
     logging.info(str(len(msgs_no_body)) + ' messages (of %d) have no body'%len(msgs))
     
@@ -233,7 +237,8 @@ def main(user_email, msgs):
     then DRAFT the response for those messages'''
     # input vars
     threshold_days = 0
-    # convert from cursor object to list
+    
+    # in case the cache is running, convert from cursor object to list. Should do nothing if not cached.
     msgs = [msg for msg in msgs]
 
     logging.info('--------------------------------------------------------------------------')
@@ -246,9 +251,10 @@ def main(user_email, msgs):
 
     # run enrich_2 on all msgs
     logging.info('starting enrichment 2')
+    print(len(msgs))
     for idx, msg in enumerate(msgs):
         enrich_2(msg, aliases)
-        if idx % 50 == 0: logging.info('enriched msg {}'.format(idx))
+        if idx % 50 == 0: logging.info('enriched (2) msg {}'.format(idx))
     logging.info('finished enrichment 2')
 
     # some info logs on message filters
@@ -306,6 +312,10 @@ def run():
     # get list of users [email, email, email]
     user_emails = db.user_creds.distinct('user_email')
     
+    # initiate draft log
+    draft_logs = []
+    batch = max(db.draft_log.distinct('batch')) + 1
+    
     # run function for each user in userlist.
     for user_email in user_emails:
         logging.info('•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••')
@@ -316,8 +326,8 @@ def run():
         logging.info('service object built')
         
         # get messages from cache or get msgs from API (and repopulate cache)
-        msgs = get_msgs_from_cache()
-        # msgs = get_msgs_enrich_then_cache_em(service)
+        # msgs = get_msgs_from_cache()
+        msgs = get_msgs_enrich_then_cache_em(service)
         
         # execute logic
         msgs_to_draft_for = main(user_email, msgs)
@@ -325,15 +335,51 @@ def run():
         # draft followups
         draft_followups_wrapper(msgs_to_draft_for, fname, sname, email, service)
         
-    execution_time = datetime.now() - start_timer
+        # contribute towards the draft-log
+        log = {
+            'user_email': user_email,
+            'num_drafts': len(msgs_to_draft_for),
+            'date': datetime.now(),
+            'msgs_drafted_for': msgs_to_draft_for, 
+            'batch': batch
+            }
+        draft_logs.append(log)
+
+    
     
     # update the db draft_log
     logging.info('updating the database draftlog')
-    batch = max(db.draft_log.distinct('batch')) + 1
-    db.draft_log.insert({'user_email': user_email, 'num_drafts': len(msgs_to_draft_for), 'date': datetime.now(), 'msgs_drafted_for': msgs_to_draft_for, 'batch': batch})
+    if draft_logs:
+        for log in draft_logs:
+            db.draft_log.insert(log)
+    else: db.draft_log.insert({None})
     
+    execution_time = datetime.now() - start_timer
     logging.info('finished! Executed in {}s'.format(execution_time.total_seconds()))
     return
 
 if __name__ == '__main__':
     run()
+
+
+# OK now we need to get the server working.
+# Maybe first, should do a run through with a few other random accounts?
+# Also, the relative date thing needs fixing to be 3 days.
+# Let's do some server work first :P
+# 1 max arg is an empty statement, it doesn't work if there is no seed batch number.
+# 2 fix the procfile
+# log user execution times.
+
+# also batches might not be working locally
+
+# remove the type error that raises if no drafts are made
+# replace info with debug
+# make get_aliases work, minimally at least always include the user_email!
+
+
+
+# Other Features
+# 0. Drafter drafted for the following emails with the following un-answered questions: (requires getting ALL questions not just one.)
+# 1. Add labels showing how many days since response
+# 2. Keep at 0 days but keep a list of drafts and remove them if they / you reply. Careful not to delete ALL replies!
+#
