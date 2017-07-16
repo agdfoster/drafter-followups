@@ -271,6 +271,8 @@ def main(user_email, msgs):
     most_recent_msg_ids, threads = get_most_recent_msgs_from_threads(msgs)
     logging.info('Built list of most recent msg ids. Found {} for {} threads.'.format(format(len(most_recent_msg_ids)), len(threads)))
 
+    msgs_to_draft_for = msgs_req_followups(msgs, most_recent_msg_ids, threshold_days)
+
     # log progress
     num_msgs_fom_me_w_q_and_most_recent = len(list([msg for msg in msgs if msg['direction'] == 'OUTBOUND' and msg['question'] and msg['id_message'] in most_recent_msg_ids]))
     logging.info('aliases = {}'.format(aliases))
@@ -278,8 +280,6 @@ def main(user_email, msgs):
     logging.info('number of messages outbound w questions = %d out of %d'%(num_msgs_fom_me_w_questions, num_msgs_from_me))
     logging.info('number of messages outbound missing primary to = %d out of %d'%(num_msgs_missing_to, num_msgs_from_me))
     logging.info('number of mesaged outbound w questions and is most recent = {} out of {}'.format(num_msgs_fom_me_w_q_and_most_recent, num_msgs_from_me))
-
-    msgs_to_draft_for = msgs_req_followups(msgs, most_recent_msg_ids, threshold_days)
     
     logging.info('number of mesaged outbound w questions and is most recent across threads = {} out of {}'.format(len(msgs_to_draft_for), num_msgs_from_me))
     if len(msgs_to_draft_for) == 0:
@@ -328,8 +328,8 @@ def run():
         logging.info('service object built')
         
         # get messages from cache or get msgs from API (and repopulate cache)
-        msgs = get_msgs_from_cache()
-        # msgs = get_msgs_enrich_then_cache_em(service)
+        # msgs = get_msgs_from_cache()
+        msgs = get_msgs_enrich_then_cache_em(service)
         
         # execute logic
         msgs_to_draft_for = main(user_email, msgs)
@@ -361,6 +361,7 @@ def run():
     return
 
 if __name__ == '__main__':
+    logging.info('started')
     run()
 
 
@@ -376,7 +377,10 @@ if __name__ == '__main__':
 
 # remove the type error that raises if no drafts are made
 # replace info with debug
+
 # make get_aliases work, minimally at least always include the user_email!
+# >> ^^ maybe rather than a chron job, run regularly but have a db log and only run once / twice a day for each user.
+# ^^^ check 'is there a new user?' at start of main process and 
 
 
 
