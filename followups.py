@@ -314,7 +314,9 @@ def run():
     
     # initiate draft log
     draft_logs = []
-    batch = max(db.draft_log.distinct('batch')) + 1
+    batch_numbers = db.draft_log.distinct('batch')
+    if batch_numbers: batch = max(batch_numbers) + 1
+    else: batch = 1
     
     # run function for each user in userlist.
     for user_email in user_emails:
@@ -326,8 +328,8 @@ def run():
         logging.info('service object built')
         
         # get messages from cache or get msgs from API (and repopulate cache)
-        # msgs = get_msgs_from_cache()
-        msgs = get_msgs_enrich_then_cache_em(service)
+        msgs = get_msgs_from_cache()
+        # msgs = get_msgs_enrich_then_cache_em(service)
         
         # execute logic
         msgs_to_draft_for = main(user_email, msgs)
