@@ -34,7 +34,7 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 # QUERY = 'from:me'
 # USER_ID = 'me'
 NUM = 10000 # cap number of messages to get in one go. Keep high for onboarding.
-SEARCH_RANGE = 3 # <<<<<< NUMBER OF DAYS TO BACK SEARCH.
+SEARCH_RANGE = 1 # <<<<<< NUMBER OF DAYS TO BACK SEARCH.
 # ^^^ TODO if you're running every day, this only needs to be 1.
 AFTER = define_search_period(SEARCH_RANGE)
 BEFORE = None

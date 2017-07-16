@@ -37,6 +37,7 @@ def execute_task():
 if __name__ == '__main__':
     
     # Heroku will run this as a background web thread
+    # NOTE toggle this off for local testing of it will just run the webserver forever.
     # gmail_new_user_server.run()
 
     # initialize the infinite cycle
