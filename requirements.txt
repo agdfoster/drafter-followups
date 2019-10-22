@@ -132,7 +132,7 @@ pep8==1.7.0
 pexpect==4.2.1
 phonenumbers==8.5.0
 pickleshare==0.7.4
-Pillow==4.0.0
+Pillow==6.2.0
 ply==3.9
 probableparsing==0.0.1
 probablepeople==0.5.4
