@@ -105,7 +105,7 @@ jsonschema==2.5.1
 lazy-object-proxy==1.2.2
 # llvmlite==0.15.0
 locket==0.2.0
-lxml==3.7.2
+lxml==4.6.2
 MarkupSafe==0.23
 matplotlib==2.0.0
 mistune==0.7.3
